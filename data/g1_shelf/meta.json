@@ -1,0 +1,60 @@
+{
+  "fps": 30.0,
+  "qpos": "root xyz, root quat wxyz, 29 joint angles (MuJoCo order)",
+  "phases": [
+    "idle",
+    "reach",
+    "grasp",
+    "lift",
+    "hold"
+  ],
+  "joint_names": [
+    "left_hip_pitch_joint",
+    "left_hip_roll_joint",
+    "left_hip_yaw_joint",
+    "left_knee_joint",
+    "left_ankle_pitch_joint",
+    "left_ankle_roll_joint",
+    "right_hip_pitch_joint",
+    "right_hip_roll_joint",
+    "right_hip_yaw_joint",
+    "right_knee_joint",
+    "right_ankle_pitch_joint",
+    "right_ankle_roll_joint",
+    "waist_yaw_joint",
+    "waist_roll_joint",
+    "waist_pitch_joint",
+    "left_shoulder_pitch_joint",
+    "left_shoulder_roll_joint",
+    "left_shoulder_yaw_joint",
+    "left_elbow_joint",
+    "left_wrist_roll_joint",
+    "left_wrist_pitch_joint",
+    "left_wrist_yaw_joint",
+    "right_shoulder_pitch_joint",
+    "right_shoulder_roll_joint",
+    "right_shoulder_yaw_joint",
+    "right_elbow_joint",
+    "right_wrist_roll_joint",
+    "right_wrist_pitch_joint",
+    "right_wrist_yaw_joint"
+  ],
+  "shelf": {
+    "vase_pos": [
+      0.46678180224940635,
+      0.13690691284065065,
+      0.5890927613405552
+    ],
+    "grasp_frame": 51,
+    "palm_offset": [
+      0.1,
+      -0.007,
+      0.0
+    ],
+    "shelf_top_z": 0.5890927613405552,
+    "shelf_front_x": 0.33678180224940635,
+    "shelf_center_y": 0.13690691284065065,
+    "shelf_depth": 0.32,
+    "shelf_width": 0.9
+  }
+}

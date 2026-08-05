@@ -65,7 +65,7 @@ def main():
             speed = float(np.clip(1.5 * dist, 0.3, 1.2))
             vel = np.array([*(to_stand / dist * speed), 0.0])
             face = np.array([1.0, 0.0, 0.0])
-        else:                                    # B (retry until it takes)
+        else:                                    # B: play the pick
             face = np.array([1.0, 0.0, 0.0])
             matcher.trigger_pick()
 

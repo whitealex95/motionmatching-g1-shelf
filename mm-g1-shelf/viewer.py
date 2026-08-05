@@ -4,7 +4,7 @@ Controls
   W / A / S / D ........ move (camera-relative)
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... grab the vase (near the shelf)
+  B .................... play the pick clip; the vase snaps onto the hand
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag orbit | right-drag pan | scroll zoom | Esc quit
@@ -213,10 +213,8 @@ class InteractiveViewer:
                     ("WALK" if speed > 1e-3 else "IDLE"))
             if m.held:
                 head += "  vase in hand"
-            elif m.near_vase:
-                head += "  [B: grab the vase]"
             else:
-                head += "  (walk to the shelf, then B)"
+                head += "  [B: play the pick]"
         else:
             head = "PICKING UP THE VASE"
         lib, cur = m.lib, m.cur
@@ -227,9 +225,7 @@ class InteractiveViewer:
         body = (f"clip [{cid}]: {clip}\n"
                 f"frame: {fic}/{length - 1}  (global {cur})\n"
                 f"contact: {'ON' if m.held else 'off'}"
-                f"   gizmo: {'on' if self.show_traj else 'off'} (T)"
-                + ("" if C.POST_PROCESSING else "   [post-processing OFF]")
-                + "\n"
+                f"   gizmo: {'on' if self.show_traj else 'off'} (T)\n"
                 "WASD move | arrows face | Shift walk | B grab | Space reset\n"
                 "drag orbit | right-drag pan | scroll zoom | Esc quit")
         mujoco.mjr_overlay(mujoco.mjtFont.mjFONT_NORMAL,

@@ -4,15 +4,15 @@
     python run.py                # open the viewer
     python run.py --build-only   # build/refresh the motion library cache and exit
 
-Drive the G1 with WASD, walk up to the shelf ahead, and press B: the pick
-clip plays, the arm IK lands the palm on the vase, and the vase sticks to
-the hand -- then walk away with it.
+Drive the G1 with WASD and press B: the pick clip plays where the robot
+stands, and the vase snaps onto the right hand at the grab -- then walk
+away with it.
 
 Controls
   W / A / S / D ........ move, relative to the camera
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... grab the vase (near the shelf)
+  B .................... play the pick clip; the vase snaps onto the hand
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag / right-drag / scroll ... orbit / pan / zoom
@@ -43,8 +43,7 @@ def main():
 
     matcher = MotionMatcher(lib)
     n_search = sum(re - rs for rs, re, _ in matcher.loco_trees)
-    print(f"  feature DB ready ({n_search} searchable loco frames, "
-          f"{len(matcher.pick_enter)} pick entries)")
+    print(f"  feature DB ready ({n_search} searchable loco frames)")
     if args.build_only:
         print("Build complete. Run `python run.py` to control the G1.")
         return

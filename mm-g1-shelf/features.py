@@ -5,10 +5,6 @@ The locomotion feature (27-D) is the GenoView one:
   Xvel (9)      local velocities of both feet + the pelvis
   XtrajPos (6)  future sim-root xy at +10/+20/+30 frames
   XtrajDir (6)  future sim heading xy at the same horizons
-
-The pick database swaps the trajectory for the interaction blocks:
-  vasePos (2)   where the vase is, in the robot's heading frame
-  held (1)      vase-in-hand flag {0,1}
 """
 import numpy as np
 from scipy.signal import savgol_filter
@@ -80,16 +76,6 @@ def central_diff_ang(rot, fps):
     return ang
 
 
-def vase_local_blocks(qh, rootPos, vase_pos, held):
-    """The live vase feature blocks, batched (T,...) or single-frame.
-    Returns (vasePos (..2), held (..1))."""
-    vase3 = np.zeros(np.shape(rootPos))
-    vase3[..., 0:2] = vase_pos[0:2]
-    vpos = quat.inv_mul_vec(qh, vase3 - rootPos * np.array([1.0, 1.0, 0.0]))[..., 0:2]
-    held = np.reshape(held, np.shape(vpos)[:-1] + (1,)).astype(float)
-    return vpos, held
-
-
 def build_db(lib):
     """Assemble the feature DB (a dict) from the library."""
     qpos = lib["qpos"].astype(np.float64)
@@ -147,33 +133,22 @@ def build_db(lib):
             XtrajDir[rs:re, 2 * k:2 * k + 2] = quat.inv_mul_vec(
                 qh_all[rs:re], headDir[ft])[:, 0:2]
 
-    vasePos, held = vase_local_blocks(
-        qh_all, simPos, lib["vase_pos"].astype(np.float64),
-        lib["contact"].astype(np.float64))
+    mask = lib["skill"] == C.SKILL_LOCO
 
-    skill = lib["skill"]
-    masks = {"loco": skill == C.SKILL_LOCO, "pick": skill == C.SKILL_PICK}
-
-    def make_db(blocks, mask, std_floor=0.0):
-        # std_floor keeps the scale sane when a block barely varies over the
-        # masked frames (the pick clip stands still, so without a floor a few
-        # cm of stance offset would blow the loss up).
+    def make_db(blocks, mask):
         if not mask.any():
             mask = np.ones(T, bool)
         X = np.concatenate([b for b, _ in blocks], -1)
         offset = X[mask].mean(0)
-        scale = np.concatenate(
-            [np.repeat(max(b[mask].std(0).mean(), std_floor) / w, b.shape[1])
-             for b, w in blocks])
+        scale = np.concatenate([np.repeat(b[mask].std(0).mean() / w, b.shape[1])
+                                for b, w in blocks])
         scale = np.where(scale < 1e-5, 1.0, scale)
         return ((X - offset) / scale).astype(np.float32), offset, scale
 
     pose = [(Xpos, 1.0), (Xvel, 1.0)]
     traj = [(XtrajPos, 1.0), (XtrajDir, 1.0)]
-    pick = [(vasePos, C.VASE_POS_WEIGHT), (held, C.HELD_WEIGHT)]
     dbs = {
-        "loco": make_db(pose + traj, masks["loco"]),                 # 27-D
-        "pick": make_db(pose + pick, masks["pick"], std_floor=0.1),  # 18-D
+        "loco": make_db(pose + traj, mask),      # 27-D
     }
     dbs = {k: dict(X=Xn, offset=off, scale=sc) for k, (Xn, off, sc) in dbs.items()}
 

@@ -49,33 +49,10 @@ MIRROR = True
 MAX_SPEED = 2.5
 WALK_SCALE = 0.4
 
-# --- Pick skill (press B near the shelf) -----------------------------------
+# --- Pick skill (press B) --------------------------------------------------
 SKILL_LOCO, SKILL_PICK = 0, 1
 PHASE_IDLE, PHASE_REACH, PHASE_GRASP, PHASE_LIFT, PHASE_HOLD = range(5)
 
 # The whole recorded scene (shelf + vase + stance) is moved by this much,
 # so the robot spawns at the origin and the shelf sits ahead of it.
 SHELF_ORIGIN = [1.55, 0.0]
-
-PICK_TRIGGER_RADIUS = 1.2   # B works within this planar distance of the vase
-
-# Pick search-feature block weights (one shared std per block, then these).
-VASE_POS_WEIGHT = 1.0            # vase position in the robot's heading frame
-HELD_WEIGHT = 0.1
-
-# Master switch for the grab gate and the reach-phase arm IK overlay.
-POST_PROCESSING = True
-
-# The grab gate: when the ride reaches the reach phase, preview the rest of
-# it from the live stance and solve the arm IK for sampled hand targets; the
-# skill aborts unless every palm residual is under this.
-GRAB_CHECK_SAMPLES = 6
-GRAB_CHECK_TOL = 0.06
-
-# Reach-phase arm IK overlay: DLS on the 7 right-arm joints.
-IK_ITERS = 8
-IK_LAMBDA = 0.05
-IK_DIR_WEIGHT = 0.3
-IK_STEP_CLAMP = 0.35
-IK_FD_EPS = 1e-4
-IK_BLEND_HALFLIFE = 0.1

@@ -68,3 +68,9 @@ MOVE_TIMEOUT = 8.0          # give up walking after this long (s)
 # route (walk the remaining path at the approach speed and sample it), so
 # the matcher plays a natural stop at the stance. Whatever offset is left
 # when the grab happens is absorbed by the vase snap.
+
+# Path snap: inside this radius of the stance the root cannot leave the
+# rail -- the cross-track part of the matched motion is projected out at
+# the given half-life (fast: gone within ~0.3 s).
+SNAP_RADIUS = 1.0
+SNAP_HALFLIFE = 0.06

@@ -199,7 +199,7 @@ class InteractiveViewer:
         if m.on_rail:
             self._add_stick(root, stance, _MARK_RGBA)
         else:
-            wp = np.array([m.move_target[0], m.move_target[1], _TRAJ_Z])
+            wp = np.array([m.route_wp[0], m.route_wp[1], _TRAJ_Z])
             self._add_stick(root, wp, _MARK_RGBA)
             self._add_stick(wp, stance, _MARK_RGBA)
         vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])

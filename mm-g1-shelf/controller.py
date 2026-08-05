@@ -110,6 +110,8 @@ class MotionMatcher:
         self.move_timer = 0.0
         self.on_rail = False
         self.move_target = self.stance_xy.copy()
+        self.route_wp = self.stance_xy - 0.6 * np.array(
+            [np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
         self.cmdFace = np.zeros(3)
@@ -166,14 +168,17 @@ class MotionMatcher:
         rel = self.rootPos[0:2] - self.stance_xy
         along = float(rel @ rail)
         n = float(np.linalg.norm(rel - along * rail))
-        # Latch onto the rail leg; only fall back off it on a big miss.
+        wp = self.stance_xy - 0.6 * rail
+        self.route_wp = wp
+        # Latch onto the final leg; only fall back off it on a big miss.
         if not self.on_rail:
-            if along < -0.25 and n < 0.25:
+            if ((along < -0.25 and n < 0.25)
+                    or float(np.linalg.norm(self.rootPos[0:2] - wp)) < 0.2):
                 self.on_rail = True
-                self.move_timer = 0.0      # fresh time budget for the rail leg
+                self.move_timer = 0.0      # fresh time budget for the last leg
         elif n > 0.45 or along > 0.1:
             self.on_rail = False
-        target = self.stance_xy if self.on_rail else self.stance_xy - 0.6 * rail
+        target = self.stance_xy if self.on_rail else wp
         self.move_target = target
         to = target - self.rootPos[0:2]
         dist = float(np.linalg.norm(to))
@@ -237,7 +242,7 @@ class MotionMatcher:
         remaining path (current position -> point behind the stance ->
         stance) at the approach speed profile and sample the horizons. We
         know the trajectory we want, so the query asks for exactly it."""
-        pts = [] if self.on_rail else [self.move_target.copy()]
+        pts = [] if self.on_rail else [self.route_wp.copy()]
         pts.append(self.stance_xy.copy())
         pos = self.rootPos[0:2].copy()
         heading = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
@@ -352,6 +357,17 @@ class MotionMatcher:
         self.rootPos = self.rootPos + self.rootVel * DT
         self.rootYaw = self.rootYaw + self.yawRateDB[f] * DT
 
+        # Path snap: on the final leg the root is pinned to the rail, in
+        # position and in heading -- the cross-track and yaw parts of the
+        # matched motion are projected out.
+        if self.state == STATE_MOVE and self.on_rail:
+            to = self.stance_xy - self.rootPos[0:2]
+            if float(np.linalg.norm(to)) < C.SNAP_RADIUS:
+                rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+                cross = to - float(to @ rail) * rail
+                a = 1.0 - 0.5 ** (DT / C.SNAP_HALFLIFE)
+                self.rootPos[0:2] += a * cross
+                self.rootYaw += a * wrap_angle(self.stance_yaw - self.rootYaw)
         self.rootRot = yaw_quat(self.rootYaw)
 
         if riding and self.pick_locked == 0:

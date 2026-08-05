@@ -1,0 +1,10 @@
+# Motion matching demo (run.py). Python 3.10.
+mujoco==3.3.3
+glfw>=2.6
+numpy>=1.24
+scipy>=1.10
+
+# Extras for rendering videos (datagen-g1-shelf/):
+#   imageio imageio-ffmpeg
+# The clip conversion (datagen-g1-shelf/make_clip.py) also needs the kimodo
+# package installed (it reads the kimodo skeleton and writes G1 qpos).

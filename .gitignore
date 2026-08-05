@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+data/motion_lib.npz
+datagen-g1-shelf/out/

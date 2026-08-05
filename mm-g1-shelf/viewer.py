@@ -195,7 +195,7 @@ class InteractiveViewer:
     def _draw_approach(self):
         m = self.matcher
         root = np.array([m.rootPos[0], m.rootPos[1], _TRAJ_Z])
-        target = np.array([m.move_target[0], m.move_target[1], _TRAJ_Z])
+        target = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
         self._add_stick(root, target, _MARK_RGBA)
         vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])
         if np.linalg.norm(vel) > 1e-3:

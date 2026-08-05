@@ -64,8 +64,7 @@ MOVE_ARRIVE_NEAR = 0.12     # this close counts as arrived right away (m)
 MOVE_ARRIVE_YAW = 0.6       # close enough to the stance heading (rad)
 MOVE_TIMEOUT = 8.0          # give up walking after this long (s)
 
-# Inside MOVE_GOAL_DIST of the current move target, the future taps bend
-# onto the straight line to it (and stop at the stance on the final leg),
-# so the matcher plays a natural stop there. Whatever offset is left when
-# the grab happens is absorbed by the vase snap.
-MOVE_GOAL_DIST = 1.0
+# During move-to-pick the future taps are read straight off the planned
+# route (walk the remaining path at the approach speed and sample it), so
+# the matcher plays a natural stop at the stance. Whatever offset is left
+# when the grab happens is absorbed by the vase snap.

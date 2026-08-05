@@ -232,26 +232,39 @@ class MotionMatcher:
             self.rootRot, self.rootAng, desiredRot, C.ROT_HALFLIFE, dt_col)
         self.Tdir = quat.mul_vec(Trot, FORWARD)
 
-    def _blend_goal_taps(self, desiredVel, desiredFace):
-        """Bend the future taps onto the straight line to the current move
-        target, so the query (and the red path) follows the command line.
-        On the rail leg the taps also stop at the stance."""
-        to = self.move_target - self.rootPos[0:2]
-        dist = float(np.linalg.norm(to))
-        if dist >= C.MOVE_GOAL_DIST or dist < 1e-6:
-            return
-        w = 1.0 - dist / C.MOVE_GOAL_DIST
-        line_dir = to / dist
-        speed = float(np.linalg.norm(desiredVel))
-        for k, t in enumerate(self.Ttimes):
-            s = speed * float(t)
-            if self.on_rail:
-                s = min(s, dist)          # arrive at the stance and stop
-            line = self.Tpos[k].copy()
-            line[0:2] = self.rootPos[0:2] + line_dir * s
-            self.Tpos[k] = (1.0 - w) * self.Tpos[k] + w * line
-            d = (1.0 - w) * self.Tdir[k] + w * desiredFace
-            self.Tdir[k] = d / (np.linalg.norm(d) + 1e-9)
+    def _path_taps(self):
+        """The future taps read straight off the planned route: walk the
+        remaining path (current position -> point behind the stance ->
+        stance) at the approach speed profile and sample the horizons. We
+        know the trajectory we want, so the query asks for exactly it."""
+        pts = [] if self.on_rail else [self.move_target.copy()]
+        pts.append(self.stance_xy.copy())
+        pos = self.rootPos[0:2].copy()
+        heading = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+        k = 0
+        for i in range(1, int(HORIZONS[-1]) + 1):
+            rem, prev = 0.0, pos
+            for p in pts:
+                rem += float(np.linalg.norm(p - prev))
+                prev = p
+            adv = float(np.clip(1.8 * rem, 0.0, 1.2)) * DT
+            while adv > 1e-9 and pts:
+                seg = pts[0] - pos
+                L = float(np.linalg.norm(seg))
+                if L < 1e-9:
+                    pts.pop(0)
+                    continue
+                heading = seg / L
+                if adv < L:
+                    pos = pos + heading * adv
+                    adv = 0.0
+                else:
+                    pos = pts.pop(0)
+                    adv -= L
+            if k < len(HORIZONS) and i == int(HORIZONS[k]):
+                self.Tpos[k] = np.array([pos[0], pos[1], 0.0])
+                self.Tdir[k] = np.array([heading[0], heading[1], 0.0])
+                k += 1
 
     def _query(self):
         d = self.db["dbs"]["loco"]
@@ -312,7 +325,7 @@ class MotionMatcher:
         self.cmdFace = np.asarray(desiredFace, float).copy()
         self._predict_trajectory(desiredVel, desiredFace)
         if self.state == STATE_MOVE:
-            self._blend_goal_taps(desiredVel, np.asarray(desiredFace, float))
+            self._path_taps()
 
         if self.searchTimer <= 0.0 and self.pick_locked == 0:
             self._search_loco()

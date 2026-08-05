@@ -15,10 +15,11 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
 - **MOVE-TO-PICK** is still motion matching, but the walking command is made
   by the controller. It routes the walk: first to a point 0.6 m behind the
   stance along its heading, then straight in facing forward, which is plain
-  walking the data has. Within `MOVE_GOAL_DIST` of the current target the
-  future taps bend onto the straight line to it (and stop at the stance on
-  the final leg), so the matcher plays a natural stop there. B again
-  cancels, and each leg gives up after `MOVE_TIMEOUT`.
+  walking the data has. The future taps are read straight off that route —
+  walk the remaining path at the approach speed profile and sample the
+  horizons — so the query asks for exactly the trajectory we want, ending
+  in a stop at the stance. B again cancels, and each leg gives up after
+  `MOVE_TIMEOUT`.
 - **PICK** plays the clip to the end with no re-matching. There is no root
   correction after the feet stop: the stance offset that remains when the
   contact flag turns on (~10-15 cm) is absorbed by the vase snap — the

@@ -43,7 +43,6 @@ def main():
     vase_xy = matcher.vase_rest[:2]
     stand = vase_xy - np.array([0.47, 0.14])   # the recorded stance offset
     ride_seen = False
-    attempts = 0
     walked_off = 0.0
     result = 'timeout'
     for tick in range(int(args.max_seconds * C.FPS)):
@@ -66,12 +65,9 @@ def main():
             speed = float(np.clip(1.5 * dist, 0.3, 1.2))
             vel = np.array([*(to_stand / dist * speed), 0.0])
             face = np.array([1.0, 0.0, 0.0])
-        else:                             # arm the grab (re-arm if it aborted)
+        else:                                    # B (retry until it takes)
             face = np.array([1.0, 0.0, 0.0])
-            if attempts < 5 and not matcher.pick_armed:
-                matcher.trigger_pick()
-                if matcher.pick_armed:
-                    attempts += 1
+            matcher.trigger_pick()
 
         world = matcher.step(vel, face)
         scene.step(world, matcher.vase_pos, matcher.vase_quat, matcher.held)

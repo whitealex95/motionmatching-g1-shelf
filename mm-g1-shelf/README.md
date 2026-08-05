@@ -6,12 +6,12 @@ Part 2: interactive motion matching with the shelf pick.
 python ../run.py           # or: python run.py from the repo root
 ```
 
-Walk with WASD, stand near the shelf, press **B** to arm the grab. While
-armed, the matcher watches the entry query loss (how well the live stance
-matches the clip's idle frames); once it drops below `PICK_ENTER_THRESHOLD`
-it cuts into the pick clip at its best idle frame and the ride plays to the
-end. Because the playback is relative (the clip is replayed from wherever
-the robot stands), two things fix up the grab:
+Walk with WASD, stand near the shelf, press **B**. The press only takes
+when the entry query loss (how well the live stance matches the clip's
+idle frames) is below `PICK_ENTER_THRESHOLD`; the matcher then cuts into
+the pick clip at its best idle frame and the ride plays to the end.
+Because the playback is relative (the clip is replayed from wherever the
+robot stands), two things fix up the grab:
 
 - **Grab gate.** When the ride reaches the reach phase, the rest of it is
   previewed from the live stance and the arm IK is solved for sampled hand

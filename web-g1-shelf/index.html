@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Motion Matching G1 — Shelf Pick</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9a9286; }
+  canvas { display: block; }
+  #hud {
+    position: fixed; top: 10px; left: 12px; color: #fff;
+    font: 13px/1.45 ui-monospace, Menlo, Consolas, monospace;
+    white-space: pre; text-shadow: 0 1px 2px rgba(0,0,0,.55);
+    pointer-events: none; user-select: none;
+  }
+  #title {
+    position: fixed; right: 12px; bottom: 10px; color: rgba(255,255,255,.85);
+    font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace;
+    text-align: right; text-shadow: 0 1px 2px rgba(0,0,0,.55);
+    pointer-events: none; user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="hud">loading…</div>
+<div id="title">motionmatching-g1-shelf — web demo<br>
+press B: the G1 walks to the shelf and picks up the vase</div>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js",
+               "three/addons/": "./vendor/addons/" } }
+</script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>

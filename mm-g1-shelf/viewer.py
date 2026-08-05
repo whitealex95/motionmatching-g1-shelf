@@ -189,14 +189,19 @@ class InteractiveViewer:
             self._add_stick(base, base + _STICK_LEN * np.array([dx, dy, 0.0]))
 
     # --- approach gizmo: how move-to-pick makes its command ------------------
-    # green line = path to the stance, blue arrow = commanded velocity,
-    # yellow tick = commanded facing. The red trajectory (T) shows what the
-    # springs predict from that command.
+    # green line = the planned route (through the point behind the stance),
+    # blue arrow = commanded velocity, yellow tick = commanded facing. The
+    # red taps are sampled along the same route, so they lie on the green.
     def _draw_approach(self):
         m = self.matcher
         root = np.array([m.rootPos[0], m.rootPos[1], _TRAJ_Z])
-        target = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
-        self._add_stick(root, target, _MARK_RGBA)
+        stance = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
+        if m.on_rail:
+            self._add_stick(root, stance, _MARK_RGBA)
+        else:
+            wp = np.array([m.move_target[0], m.move_target[1], _TRAJ_Z])
+            self._add_stick(root, wp, _MARK_RGBA)
+            self._add_stick(wp, stance, _MARK_RGBA)
         vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])
         if np.linalg.norm(vel) > 1e-3:
             tip = root + 0.5 * vel
@@ -268,6 +273,7 @@ class InteractiveViewer:
         if self.show_traj:
             legend.append("red: future path")
             if state == "MOVE-TO-PICK":
+                legend.append("green line: planned route")
                 legend.append("blue: walk command")
                 legend.append("yellow: face command")
         if not m.held:

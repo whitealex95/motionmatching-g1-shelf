@@ -13,18 +13,20 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
 ```
 
 - **MOVE-TO-PICK** is still motion matching, but the walking command is made
-  by the controller: walk toward the clip's recorded stance (its root pose
-  at the pick entry frame), facing the travel direction and then the stance
-  heading. Each step is also warped a little sideways toward the stance —
-  at most `MOVE_WARP_GAIN` of the real root motion, so planted feet never
-  slide. Every step it checks whether the robot is close enough (position
-  and heading); B again cancels, and it gives up after `MOVE_TIMEOUT`.
-- **PICK** plays the clip to the end with no re-matching. The root offset
-  left over from walking is blended away (`MOVE_LOCK_HALFLIFE`) only while
-  the body still moves (`LOCK_SPEED_BAND`) — the entry blend — so there is
-  no drift once the robot stands; the last ~2 cm are absorbed by the vase
-  snap. When the clip's contact flag turns on, the vase snaps onto the
-  right palm with the recorded grip pose and follows the hand from then on.
+  by the controller. It routes along the rail — the line through the
+  recorded stance in its heading direction: first walk to a point 0.6 m
+  behind the stance, then straight in facing forward, which is plain
+  walking the data has. On the way, each step is warped toward the rail by
+  a fraction of the real root motion (ramping from `MOVE_WARP_GAIN` to a
+  full projection near the stance), so planted feet never slide; on the
+  final leg the future taps also bend onto the line and stop at the stance
+  (`MOVE_GOAL_DIST`), so the matcher plays a natural stop there. B again
+  cancels, and each leg gives up after `MOVE_TIMEOUT`.
+- **PICK** plays the clip to the end with no re-matching. There is no root
+  correction after the feet stop: the stance offset that remains when the
+  contact flag turns on (~10-15 cm) is absorbed by the vase snap — the
+  vase jumps to the recorded grip pose on the palm at that moment and
+  follows the hand from then on.
 
 With the trajectory gizmo on (T), MOVE-TO-PICK also shows how its command
 is made: a green line to the stance, a blue arrow for the commanded

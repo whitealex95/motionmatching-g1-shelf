@@ -57,20 +57,19 @@ PHASE_IDLE, PHASE_REACH, PHASE_GRASP, PHASE_LIFT, PHASE_HOLD = range(5)
 # so the robot spawns at the origin and the shelf sits ahead of it.
 SHELF_ORIGIN = [1.55, 0.0]
 
-# Move-to-pick: B walks the robot to the clip's recorded stance first.
-# The arrive distance stays outside the slow-walk dead zone of the loco data
-# (below ~0.3 m the matcher only finds idle frames and the robot stalls);
-# the leftover offset is blended away during the clip's idle second.
-MOVE_ARRIVE_DIST = 0.35     # close enough to the stance (m)
+# Move-to-pick: B routes the robot onto the rail (the line through the
+# stance along its heading) 0.6 m behind the stance, then straight in.
+MOVE_ARRIVE_DIST = 0.6      # close and settled counts as arrived (m)
+MOVE_ARRIVE_NEAR = 0.12     # this close counts as arrived right away (m)
 MOVE_ARRIVE_YAW = 0.6       # close enough to the stance heading (rad)
-MOVE_FACE_DIST = 0.6        # face the stance heading from this distance in
-MOVE_LOCK_HALFLIFE = 0.075  # blend rate of the leftover root offset
 MOVE_TIMEOUT = 8.0          # give up walking after this long (s)
 
-# Warp: while walking to the stance, each step may be bent sideways (and the
-# turn stretched) by at most this fraction of the real root motion, so the
-# correction hides inside the steps and planted feet never slide. The same
-# idea gates the leftover-offset blend: it only runs while the body still
-# moves faster than the dead band.
+# Warp: while walking to the stance, each step may be bent toward the rail
+# (the line through the stance along its heading) by a fraction of the real
+# root motion, so planted feet never slide. The fraction ramps from
+# MOVE_WARP_GAIN far away to 1 (full projection) at the stance. Inside
+# MOVE_GOAL_DIST the future taps also bend onto the line and stop at the
+# stance, so the matcher plays a natural stop there. Whatever offset is
+# left when the grab happens is absorbed by the vase snap.
 MOVE_WARP_GAIN = 0.2
-LOCK_SPEED_BAND = (0.08, 0.33)   # blend off below, fully on above (m/s)
+MOVE_GOAL_DIST = 1.0

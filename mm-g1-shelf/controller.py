@@ -108,9 +108,7 @@ class MotionMatcher:
         self.pick_pending = False
         self.pick_locked = 0
         self.move_timer = 0.0
-        # Root offset to the exact stance, blended away once PICK starts.
-        self.lockPos = np.zeros(2)
-        self.lockYaw = 0.0
+        self.on_rail = False
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
         self.cmdFace = np.zeros(3)
@@ -160,36 +158,51 @@ class MotionMatcher:
 
     # --- move-to-pick --------------------------------------------------------
     def _steer_to_stance(self):
-        """The walking command toward the recorded stance: velocity scaled by
-        distance; face the travel direction, then the stance heading."""
-        to = self.stance_xy - self.rootPos[:2]
+        """Walk onto the rail behind the stance first, then straight in
+        along the stance heading -- plain forward walking, which the data
+        has, instead of sideways shuffling, which it does not."""
+        rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+        rel = self.rootPos[0:2] - self.stance_xy
+        along = float(rel @ rail)
+        n = float(np.linalg.norm(rel - along * rail))
+        # Latch onto the rail leg; only fall back off it on a big miss.
+        if not self.on_rail:
+            if along < -0.25 and n < 0.25:
+                self.on_rail = True
+                self.move_timer = 0.0      # fresh time budget for the rail leg
+        elif n > 0.45 or along > 0.1:
+            self.on_rail = False
+        target = self.stance_xy if self.on_rail else self.stance_xy - 0.6 * rail
+        to = target - self.rootPos[0:2]
         dist = float(np.linalg.norm(to))
         vel = np.zeros(3)
         if dist > 1e-6:
             speed = float(np.clip(1.8 * dist, 0.25, 1.2))
             vel[0:2] = to / dist * speed
-        if dist > C.MOVE_FACE_DIST:
-            face = vel / (np.linalg.norm(vel) + 1e-9)
+        if self.on_rail or dist < 1e-6:
+            face = np.array([rail[0], rail[1], 0.0])
         else:
-            face = np.array([np.cos(self.stance_yaw),
-                             np.sin(self.stance_yaw), 0.0])
+            face = vel / (np.linalg.norm(vel) + 1e-9)
         return vel, face
 
     def _at_stance(self):
+        """Arrived: very close, or walking the rail came to a stop nearby."""
         dist = float(np.linalg.norm(self.stance_xy - self.rootPos[:2]))
         dyaw = abs(wrap_angle(self.stance_yaw - self.rootYaw))
-        return dist < C.MOVE_ARRIVE_DIST and dyaw < C.MOVE_ARRIVE_YAW
+        if dyaw >= C.MOVE_ARRIVE_YAW:
+            return False
+        if dist < C.MOVE_ARRIVE_NEAR:
+            return True
+        return (self.on_rail and self.move_timer > 1.0
+                and dist < C.MOVE_ARRIVE_DIST and self.pelvis_speed < 0.15)
 
     def _enter_pick(self):
-        """Cut into the pick clip. The root offset left over from walking is
-        blended away while the clip's idle frames play, so the clip runs
-        from the exact recorded stance by the time the hand reaches out."""
+        """Cut into the pick clip. The stance offset left at this point is
+        small; the vase snap absorbs it at the grab."""
         self._inertialize_into(self.pick_entry, self.pick_lo, self.pick_hi)
         self.state = C.SKILL_PICK
         self.pick_locked = self.pick_hi - 1 - self.pick_entry
         self.searchTimer = C.SEARCH_TIME
-        self.lockPos = self.stance_xy - self.rootPos[:2]
-        self.lockYaw = wrap_angle(self.stance_yaw - self.rootYaw)
 
     def _end_skill(self):
         """Pick finished: search locomotion and blend back."""
@@ -216,6 +229,25 @@ class MotionMatcher:
         Trot, _ = TrajectorySpringRotation(
             self.rootRot, self.rootAng, desiredRot, C.ROT_HALFLIFE, dt_col)
         self.Tdir = quat.mul_vec(Trot, FORWARD)
+
+    def _blend_goal_taps(self, desiredVel):
+        """Near the stance, bend the future taps onto the straight line to
+        it and stop them there, so the query asks to arrive and stop."""
+        to = self.stance_xy - self.rootPos[0:2]
+        dist = float(np.linalg.norm(to))
+        if dist >= C.MOVE_GOAL_DIST or dist < 1e-6:
+            return
+        w = 1.0 - dist / C.MOVE_GOAL_DIST
+        line_dir = to / dist
+        speed = float(np.linalg.norm(desiredVel))
+        head = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw), 0.0])
+        for k, t in enumerate(self.Ttimes):
+            s = min(speed * float(t), dist)
+            line = self.Tpos[k].copy()
+            line[0:2] = self.rootPos[0:2] + line_dir * s
+            self.Tpos[k] = (1.0 - w) * self.Tpos[k] + w * line
+            d = (1.0 - w) * self.Tdir[k] + w * head
+            self.Tdir[k] = d / (np.linalg.norm(d) + 1e-9)
 
     def _query(self):
         d = self.db["dbs"]["loco"]
@@ -275,6 +307,8 @@ class MotionMatcher:
         self.cmdVel = desiredVel.copy()
         self.cmdFace = np.asarray(desiredFace, float).copy()
         self._predict_trajectory(desiredVel, desiredFace)
+        if self.state == STATE_MOVE and self.on_rail:
+            self._blend_goal_taps(desiredVel)
 
         if self.searchTimer <= 0.0 and self.pick_locked == 0:
             self._search_loco()
@@ -301,30 +335,23 @@ class MotionMatcher:
         self.rootPos = self.rootPos + self.rootVel * DT
         self.rootYaw = self.rootYaw + self.yawRateDB[f] * DT
 
-        # Warp toward the stance while walking there: bend each step a bit
-        # sideways, never by more than a fraction of the real motion, so
-        # planted feet do not slide. The heading is left alone -- the matcher
-        # needs to turn freely, and the leftover yaw blends away at entry.
+        # Warp toward the rail (the line through the stance along its
+        # heading) while walking there: bend each step by a fraction of the
+        # real motion, so planted feet never slide. The fraction ramps up to
+        # a full projection as the robot closes in. The heading is left
+        # alone -- the matcher needs to turn freely.
         if self.state == STATE_MOVE:
-            v = self.rootVel[0:2]
-            step_len = float(np.linalg.norm(v)) * DT
+            step_len = float(np.linalg.norm(self.rootVel[0:2])) * DT
             if step_len > 1e-5:
-                fwd = v / (np.linalg.norm(v) + 1e-9)
-                err = self.stance_xy - self.rootPos[0:2]
-                cross = err - float(err @ fwd) * fwd
+                to = self.stance_xy - self.rootPos[0:2]
+                dist = float(np.linalg.norm(to))
+                rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+                cross = to - float(to @ rail) * rail
                 n = float(np.linalg.norm(cross))
+                gain = C.MOVE_WARP_GAIN + (1.0 - C.MOVE_WARP_GAIN) * max(
+                    0.0, 1.0 - dist / C.MOVE_GOAL_DIST)
                 if n > 1e-6:
-                    self.rootPos[0:2] += min(C.MOVE_WARP_GAIN * step_len, n) * cross / n
-
-        # Blend the leftover stance offset away (set when PICK started),
-        # only while the body still moves -- never on planted feet.
-        s0, s1 = C.LOCK_SPEED_BAND
-        gate = float(np.clip((self.pelvis_speed - s0) / (s1 - s0), 0.0, 1.0))
-        a = gate * (1.0 - 0.5 ** (DT / C.MOVE_LOCK_HALFLIFE))
-        self.rootPos[0:2] += a * self.lockPos
-        self.rootYaw += a * self.lockYaw
-        self.lockPos = (1.0 - a) * self.lockPos
-        self.lockYaw = (1.0 - a) * self.lockYaw
+                    self.rootPos[0:2] += min(gain * step_len, n) * cross / n
         self.rootRot = yaw_quat(self.rootYaw)
 
         if riding and self.pick_locked == 0:

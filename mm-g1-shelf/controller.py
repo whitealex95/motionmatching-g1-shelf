@@ -110,7 +110,6 @@ class MotionMatcher:
         self.move_timer = 0.0
         self.on_rail = False
         self.move_target = self.stance_xy.copy()
-        self.warp_step = np.zeros(2)     # root correction applied this frame
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
         self.cmdFace = np.zeros(3)
@@ -340,25 +339,6 @@ class MotionMatcher:
         self.rootPos = self.rootPos + self.rootVel * DT
         self.rootYaw = self.rootYaw + self.yawRateDB[f] * DT
 
-        # Warp toward the rail (the line through the stance along its
-        # heading) while walking there: bend each step by a fraction of the
-        # real motion, so planted feet never slide. The fraction ramps up to
-        # a full projection as the robot closes in. The heading is left
-        # alone -- the matcher needs to turn freely.
-        self.warp_step = np.zeros(2)
-        if self.state == STATE_MOVE:
-            step_len = float(np.linalg.norm(self.rootVel[0:2])) * DT
-            if step_len > 1e-5:
-                to = self.stance_xy - self.rootPos[0:2]
-                dist = float(np.linalg.norm(to))
-                rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
-                cross = to - float(to @ rail) * rail
-                n = float(np.linalg.norm(cross))
-                gain = C.MOVE_WARP_GAIN + (1.0 - C.MOVE_WARP_GAIN) * max(
-                    0.0, 1.0 - dist / C.MOVE_GOAL_DIST)
-                if n > 1e-6:
-                    self.warp_step = min(gain * step_len, n) * cross / n
-                    self.rootPos[0:2] += self.warp_step
         self.rootRot = yaw_quat(self.rootYaw)
 
         if riding and self.pick_locked == 0:

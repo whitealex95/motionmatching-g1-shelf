@@ -64,12 +64,8 @@ MOVE_ARRIVE_NEAR = 0.12     # this close counts as arrived right away (m)
 MOVE_ARRIVE_YAW = 0.6       # close enough to the stance heading (rad)
 MOVE_TIMEOUT = 8.0          # give up walking after this long (s)
 
-# Warp: while walking to the stance, each step may be bent toward the rail
-# (the line through the stance along its heading) by a fraction of the real
-# root motion, so planted feet never slide. The fraction ramps from
-# MOVE_WARP_GAIN far away to 1 (full projection) at the stance. Inside
-# MOVE_GOAL_DIST the future taps also bend onto the line and stop at the
-# stance, so the matcher plays a natural stop there. Whatever offset is
-# left when the grab happens is absorbed by the vase snap.
-MOVE_WARP_GAIN = 0.2
+# Inside MOVE_GOAL_DIST of the current move target, the future taps bend
+# onto the straight line to it (and stop at the stance on the final leg),
+# so the matcher plays a natural stop there. Whatever offset is left when
+# the grab happens is absorbed by the vase snap.
 MOVE_GOAL_DIST = 1.0

@@ -13,14 +13,11 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
 ```
 
 - **MOVE-TO-PICK** is still motion matching, but the walking command is made
-  by the controller. It routes along the rail — the line through the
-  recorded stance in its heading direction: first walk to a point 0.6 m
-  behind the stance, then straight in facing forward, which is plain
-  walking the data has. On the way, each step is warped toward the rail by
-  a fraction of the real root motion (ramping from `MOVE_WARP_GAIN` to a
-  full projection near the stance), so planted feet never slide; on the
-  final leg the future taps also bend onto the line and stop at the stance
-  (`MOVE_GOAL_DIST`), so the matcher plays a natural stop there. B again
+  by the controller. It routes the walk: first to a point 0.6 m behind the
+  stance along its heading, then straight in facing forward, which is plain
+  walking the data has. Within `MOVE_GOAL_DIST` of the current target the
+  future taps bend onto the straight line to it (and stop at the stance on
+  the final leg), so the matcher plays a natural stop there. B again
   cancels, and each leg gives up after `MOVE_TIMEOUT`.
 - **PICK** plays the clip to the end with no re-matching. There is no root
   correction after the feet stop: the stance offset that remains when the

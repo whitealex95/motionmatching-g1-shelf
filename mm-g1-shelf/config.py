@@ -59,10 +59,10 @@ SHELF_ORIGIN = [1.55, 0.0]
 
 PICK_TRIGGER_RADIUS = 1.2   # B works within this planar distance of the vase
 
-# B arms the grab; the pick clip starts playing by itself once the query
-# loss drops below this. Measured bands: settled at the right stance ~6-7,
-# standing side-on ~18, facing away ~28, still walking in ~35+.
-PICK_ENTER_THRESHOLD = 8.0
+# B only takes when the entry query loss is below this. Measured bands:
+# settled near the shelf facing the vase ~2-7, facing away ~19, still
+# walking in ~35+. Stance accuracy itself is checked by the grab gate.
+PICK_ENTER_THRESHOLD = 10.0
 
 # Pick search-feature block weights (one shared std per block, then these).
 HAND_POS_WEIGHT = 0.1 * 1.01

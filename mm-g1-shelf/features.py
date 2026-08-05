@@ -175,13 +175,17 @@ def build_db(lib):
     skill = lib["skill"]
     masks = {"loco": skill == C.SKILL_LOCO, "pick": skill == C.SKILL_PICK}
 
-    def make_db(blocks, mask):
+    def make_db(blocks, mask, std_floor=0.0):
+        # std_floor keeps the scale sane when a block barely varies over the
+        # masked frames (the pick clip stands still, so without a floor a few
+        # cm of stance offset would blow the loss up).
         if not mask.any():
             mask = np.ones(T, bool)
         X = np.concatenate([b for b, _ in blocks], -1)
         offset = X[mask].mean(0)
-        scale = np.concatenate([np.repeat(b[mask].std(0).mean() / w, b.shape[1])
-                                for b, w in blocks])
+        scale = np.concatenate(
+            [np.repeat(max(b[mask].std(0).mean(), std_floor) / w, b.shape[1])
+             for b, w in blocks])
         scale = np.where(scale < 1e-5, 1.0, scale)
         return ((X - offset) / scale).astype(np.float32), offset, scale
 
@@ -193,8 +197,8 @@ def build_db(lib):
             (robotPos, C.ROBOT_POS_WEIGHT), (robotDir, C.ROBOT_DIR_WEIGHT),
             (held, C.HELD_WEIGHT)]
     dbs = {
-        "loco": make_db(pose + traj, masks["loco"]),     # 27-D
-        "pick": make_db(pose + pick, masks["pick"]),     # 15 + 18 = 33-D
+        "loco": make_db(pose + traj, masks["loco"]),                 # 27-D
+        "pick": make_db(pose + pick, masks["pick"], std_floor=0.1),  # 33-D
     }
     dbs = {k: dict(X=Xn, offset=off, scale=sc) for k, (Xn, off, sc) in dbs.items()}
 

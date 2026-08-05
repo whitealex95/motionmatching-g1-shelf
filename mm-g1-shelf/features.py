@@ -158,5 +158,5 @@ def build_db(lib):
         simPos=simPos, simTheta=simTheta, simVel=simVel, yawRate=yawRate,
         pelvLocalPos=pelvLocalPos, pelvLocalVel=pelvLocalVel,
         pelvLocalRot=pelvLocalRot, pelvLocalAng=pelvLocalAng,
-        rawXpos=Xpos, rawXvel=Xvel, rawTrajPos=XtrajPos, rawTrajDir=XtrajDir,
+        rawXpos=Xpos, rawXvel=Xvel,
         dbs=dbs)

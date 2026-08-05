@@ -1,7 +1,6 @@
 """MuJoCo G1 wrapper: qpos conversion + forward kinematics for features."""
 import numpy as np
 import mujoco
-from scipy.spatial.transform import Rotation as R
 
 import config as C
 
@@ -14,13 +13,6 @@ def csv_to_qpos(rows):
     return q
 
 
-def quat_wxyz_yaw(quat_wxyz):
-    """Heading (yaw about world Z) of a wxyz quaternion array (...,4)."""
-    q = np.atleast_2d(quat_wxyz)
-    xyzw = q[:, [1, 2, 3, 0]]
-    return R.from_quat(xyzw).as_euler("xyz")[:, 2]
-
-
 class G1Model:
     """Loads the menagerie G1 and exposes batched FK for feature extraction."""
 
@@ -31,28 +23,19 @@ class G1Model:
             mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, n)
             for n in C.FOOT_BODIES
         ]
-        self.hand_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY,
-                                         C.HAND_BODY)
-        self.palm_offset = np.array(C.PALM_OFFSET)
         self._build_mirror_map()
 
     def fk(self, qpos_seq):
-        """One FK pass per frame. Returns (feet (T,2,3), hand_pos (T,3),
-        hand_dir (T,3)) in world coordinates."""
+        """One FK pass per frame. Returns world foot positions (T,2,3)."""
         qpos_seq = np.atleast_2d(qpos_seq)
         T = len(qpos_seq)
         feet = np.empty((T, len(self.foot_ids), 3))
-        hand_pos = np.empty((T, 3))
-        hand_dir = np.empty((T, 3))
         for t, q in enumerate(qpos_seq):
             self.data.qpos[:] = q
             mujoco.mj_kinematics(self.model, self.data)
             for k, bid in enumerate(self.foot_ids):
                 feet[t, k] = self.data.xpos[bid]
-            rot = self.data.xmat[self.hand_id].reshape(3, 3)
-            hand_pos[t] = self.data.xpos[self.hand_id] + rot @ self.palm_offset
-            hand_dir[t] = rot[:, 0]
-        return feet, hand_pos, hand_dir
+        return feet
 
     def body_tree(self):
         """Kinematic tree arrays for the arm IK: per body (world excluded,

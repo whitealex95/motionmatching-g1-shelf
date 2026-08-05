@@ -13,7 +13,7 @@ import pickle
 import numpy as np
 
 import config as C
-from g1_model import G1Model, csv_to_qpos, quat_wxyz_yaw
+from g1_model import G1Model, csv_to_qpos
 
 
 def _gmr_rows(name, data_dir):
@@ -69,8 +69,7 @@ def build_library(out=C.LIB_PATH):
         print(f"  [{cid}] {name}: {n} frames{tag}")
 
     qpos = np.concatenate(qpos)
-    feet, hand_pos, hand_dir = model.fk(qpos)
-    yaw = quat_wxyz_yaw(qpos[:, 3:7])
+    feet = model.fk(qpos)
     tree = model.body_tree()
 
     vase = np.array(meta["vase_pos"], np.float64)
@@ -80,9 +79,6 @@ def build_library(out=C.LIB_PATH):
         out,
         qpos=qpos.astype(np.float32),
         feet_world=feet.astype(np.float32),
-        hand_pos=hand_pos.astype(np.float32),
-        hand_dir=hand_dir.astype(np.float32),
-        yaw=yaw.astype(np.float32),
         clip_id=np.concatenate(clip_id).astype(np.int32),
         frame_in_clip=np.concatenate(frame_in_clip).astype(np.int32),
         lengths=np.array(lengths, np.int32),

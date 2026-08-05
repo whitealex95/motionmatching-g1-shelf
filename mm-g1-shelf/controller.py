@@ -7,13 +7,14 @@ inertialized cuts. The pick runs as a small state machine:
     LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
 
 MOVE-TO-PICK is still motion matching, but the command is made here: walk
-toward the clip's recorded stance (its root pose at the pick entry frame),
-so the trajectory query is built from the current state and the pick spot.
-Once the robot is close enough, PICK plays the clip to the end with no
-re-matching; the last root offset to the exact stance blends away during
-the idle frames, so the hand lands on the vase. When the clip's contact
-flag turns on, the vase snaps onto the right palm with the recorded grip
-pose and follows the hand from then on.
+a planned route to the clip's recorded stance (straight to a way-in point
+behind it, around a rounded corner, then in along the stance heading), with
+the future taps read straight off that route. On the final leg the root is
+pinned to the rail, and the route aims past the stance so the walk never
+slows into the dead zone; PICK starts at the stance crossing and plays the
+clip to the end with no re-matching. When the clip's contact flag turns
+on, the vase snaps onto the right palm with the recorded grip pose and
+follows the hand from then on.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -48,7 +49,6 @@ class MotionMatcher:
         self.prDB, self.paDB = db["pelvLocalRot"], db["pelvLocalAng"]
         self.Xloco = db["dbs"]["loco"]["X"]
         self.rawXpos, self.rawXvel = db["rawXpos"], db["rawXvel"]
-        self.clip_id = lib["clip_id"]
         self.skill = lib["skill"]
         self.phase = lib["phase"]
         self.contact = lib["contact"]
@@ -65,17 +65,18 @@ class MotionMatcher:
             self.loco_trees.append((int(rs), int(re),
                                     cKDTree(self.Xloco[rs:re - TAIL])))
 
-        # The pick clip: entered at its first frame, played to the end. The
-        # idle second at the start is the window where the root offset from
-        # walking blends away.
+        # The pick clip: entered at its first frame, played to the end.
         pick_rows = np.where(self.skill == C.SKILL_PICK)[0]
         lo, hi = self._clip_bounds(int(pick_rows[0]))
         self.pick_entry = lo
         self.pick_lo, self.pick_hi = lo, hi
 
-        # The recorded stance: where move-to-pick walks to.
+        # The recorded stance: where move-to-pick walks to. The way-in
+        # point sits 0.6 m behind it on the rail.
         self.stance_xy = self.simPosDB[self.pick_entry][:2].copy()
         self.stance_yaw = float(self.simThetaDB[self.pick_entry])
+        self.route_wp = self.stance_xy - 0.6 * np.array(
+            [np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
 
         # The grip: palm -> vase pose at the clip's own grab frame. When the
         # contact flag turns on, the vase snaps to this pose on the live palm.
@@ -109,8 +110,6 @@ class MotionMatcher:
         self.pick_locked = 0
         self.move_timer = 0.0
         self.on_rail = False
-        self.route_wp = self.stance_xy - 0.6 * np.array(
-            [np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
         self.route_pts = [self.rootPos[0:2].copy(), self.stance_xy.copy()]
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
@@ -195,8 +194,6 @@ class MotionMatcher:
         rel = self.rootPos[0:2] - self.stance_xy
         along = float(rel @ rail)
         n = float(np.linalg.norm(rel - along * rail))
-        wp = self.stance_xy - 0.6 * rail
-        self.route_wp = wp
         # Latch onto the final leg once the curve has merged with the rail;
         # only fall back off it on a big miss.
         if not self.on_rail:
@@ -282,9 +279,9 @@ class MotionMatcher:
 
     def _path_taps(self):
         """The future taps read straight off the planned route: walk the
-        remaining path (current position -> point behind the stance ->
-        stance) at the approach speed profile and sample the horizons. We
-        know the trajectory we want, so the query asks for exactly it."""
+        remaining path at the approach speed profile and sample the
+        horizons. We know the trajectory we want, so the query asks for
+        exactly it."""
         pts = [p.copy() for p in self.route_pts[1:]]
         pos = self.rootPos[0:2].copy()
         heading = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
@@ -324,11 +321,9 @@ class MotionMatcher:
         return (q - d["offset"]) / d["scale"]
 
     # --- search --------------------------------------------------------------
-    def _search_trees(self, trees, Xq, Xself, with_bias, bias_tail=None):
-        if bias_tail is None:
-            bias_tail = HORIZONS[-1]
+    def _search_trees(self, trees, Xq, Xself, with_bias):
         bestF, bestLo, bestHi = self.animFrame, self.lo, self.hi
-        if with_bias and self.animFrame < self.hi - bias_tail:
+        if with_bias and self.animFrame < self.hi - HORIZONS[-1]:
             best = float(np.linalg.norm(Xq - Xself[self.animFrame]) - C.CURRENT_BIAS)
         else:
             best = np.inf

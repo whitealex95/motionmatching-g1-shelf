@@ -4,7 +4,7 @@ Controls
   W / A / S / D ........ move (camera-relative)
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... grab the vase (works when the stance matches well)
+  B .................... grab the vase (near the shelf)
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag orbit | right-drag pan | scroll zoom | Esc quit
@@ -223,13 +223,11 @@ class InteractiveViewer:
         cid = int(lib["clip_id"][cur])
         clip = lib["clip_names"][cid]
         fic, length = int(lib["frame_in_clip"][cur]), int(lib["lengths"][cid])
-        err = "  --  " if m.pick_err is None else f"{m.pick_err:6.2f}"
         title = f"{head}   {speed:.1f} m/s"
         body = (f"clip [{cid}]: {clip}\n"
                 f"frame: {fic}/{length - 1}  (global {cur})\n"
                 f"contact: {'ON' if m.held else 'off'}"
-                f"   gizmo: {'on' if self.show_traj else 'off'} (T)\n"
-                f"query loss: {err} / thr {C.PICK_ENTER_THRESHOLD:.1f}"
+                f"   gizmo: {'on' if self.show_traj else 'off'} (T)"
                 + ("" if C.POST_PROCESSING else "   [post-processing OFF]")
                 + "\n"
                 "WASD move | arrows face | Shift walk | B grab | Space reset\n"

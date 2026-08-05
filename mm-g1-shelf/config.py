@@ -59,11 +59,6 @@ SHELF_ORIGIN = [1.55, 0.0]
 
 PICK_TRIGGER_RADIUS = 1.2   # B works within this planar distance of the vase
 
-# B only takes when the entry query loss is below this. Measured bands:
-# settled near the shelf facing the vase ~2-5, facing away ~12, still
-# walking ~14+. Stance accuracy itself is checked by the grab gate.
-PICK_ENTER_THRESHOLD = 10.0
-
 # Pick search-feature block weights (one shared std per block, then these).
 VASE_POS_WEIGHT = 1.0            # vase position in the robot's heading frame
 HELD_WEIGHT = 0.1

@@ -4,16 +4,15 @@
     python run.py                # open the viewer
     python run.py --build-only   # build/refresh the motion library cache and exit
 
-Drive the G1 with WASD, walk up to the shelf ahead, and press B: if the
-stance matches the clip well enough (query loss below the threshold) the
-pick clip plays, the arm IK lands the palm on the vase, and the vase sticks
-to the hand -- then walk away with it.
+Drive the G1 with WASD, walk up to the shelf ahead, and press B: the pick
+clip plays, the arm IK lands the palm on the vase, and the vase sticks to
+the hand -- then walk away with it.
 
 Controls
   W / A / S / D ........ move, relative to the camera
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... grab the vase (works when the stance matches well)
+  B .................... grab the vase (near the shelf)
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag / right-drag / scroll ... orbit / pan / zoom

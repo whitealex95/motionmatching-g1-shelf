@@ -115,8 +115,6 @@ class MotionMatcher:
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
         self.cmdFace = np.zeros(3)
-        self.pelvis_speed = 0.0
-        self._prev_pelvis = None
         # The vase: on the shelf until the grab, then stuck to the palm.
         self.held = False
         self.vase_pos = self.vase_rest.copy()
@@ -178,7 +176,10 @@ class MotionMatcher:
                 self.move_timer = 0.0      # fresh time budget for the last leg
         elif n > 0.45 or along > 0.1:
             self.on_rail = False
-        target = self.stance_xy if self.on_rail else wp
+        # The rail target sits past the stance, so the walk stays above the
+        # dead zone; PICK starts at the stance crossing, not at a stop.
+        phantom = self.stance_xy + C.MOVE_OVERSHOOT * rail
+        target = phantom if self.on_rail else wp
         self.move_target = target
         to = target - self.rootPos[0:2]
         dist = float(np.linalg.norm(to))
@@ -193,15 +194,16 @@ class MotionMatcher:
         return vel, face
 
     def _at_stance(self):
-        """Arrived: very close, or walking the rail came to a stop nearby."""
-        dist = float(np.linalg.norm(self.stance_xy - self.rootPos[:2]))
+        """Arrived: already standing at the stance, or walking the rail and
+        just crossed the stance plane."""
+        rel = self.rootPos[0:2] - self.stance_xy
+        dist = float(np.linalg.norm(rel))
         dyaw = abs(wrap_angle(self.stance_yaw - self.rootYaw))
-        if dyaw >= C.MOVE_ARRIVE_YAW:
-            return False
-        if dist < C.MOVE_ARRIVE_NEAR:
-            return True
-        return (self.on_rail and self.move_timer > 1.0
-                and dist < C.MOVE_ARRIVE_DIST and self.pelvis_speed < 0.15)
+        if not self.on_rail:
+            # B pressed while already standing at the stance.
+            return dist < C.MOVE_ARRIVE_NEAR and dyaw < C.MOVE_ARRIVE_YAW
+        rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+        return float(rel @ rail) > -0.02
 
     def _enter_pick(self):
         """Cut into the pick clip. The stance offset left at this point is
@@ -242,8 +244,10 @@ class MotionMatcher:
         remaining path (current position -> point behind the stance ->
         stance) at the approach speed profile and sample the horizons. We
         know the trajectory we want, so the query asks for exactly it."""
+        rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+        end = self.stance_xy + C.MOVE_OVERSHOOT * rail
         pts = [] if self.on_rail else [self.route_wp.copy()]
-        pts.append(self.stance_xy.copy())
+        pts.append(end)
         pos = self.rootPos[0:2].copy()
         heading = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
         k = 0
@@ -392,12 +396,6 @@ class MotionMatcher:
         qpos[0:3] = pelvWorldPos
         qpos[3:7] = pelvWorldRot
         qpos[7:] = dofOut
-
-        # Measured body speed, used to gate the offset blend next frame.
-        if self._prev_pelvis is not None:
-            self.pelvis_speed = float(
-                np.linalg.norm(qpos[0:2] - self._prev_pelvis)) / DT
-        self._prev_pelvis = qpos[0:2].copy()
 
         # The vase: snap onto the palm when the contact flag turns on, then
         # follow the hand with the recorded grip pose.

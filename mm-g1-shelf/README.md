@@ -15,15 +15,18 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
 - **MOVE-TO-PICK** is still motion matching, but the walking command is made
   by the controller. It routes the walk: first to a point 0.6 m behind the
   stance along its heading, then straight in facing forward, which is plain
-  walking the data has. The future taps are read straight off that route —
-  walk the remaining path at the approach speed profile and sample the
-  horizons — so the query asks for exactly the trajectory we want, ending
-  in a stop at the stance. B again cancels, and each leg gives up after
-  `MOVE_TIMEOUT`.
-- **PICK** plays the clip to the end with no re-matching. There is no root
-  correction after the feet stop: the stance offset that remains when the
-  contact flag turns on (~10-15 cm) is absorbed by the vase snap — the
-  vase jumps to the recorded grip pose on the palm at that moment and
+  walking the data has. The rail aims `MOVE_OVERSHOOT` past the stance, so
+  the commanded walk never slows into the slow-walk dead zone; the pick
+  starts the moment the robot crosses the stance plane, still walking. On
+  the final leg the root is snapped to the rail — the cross-track and yaw
+  parts of the matched motion are projected out (`SNAP_HALFLIFE`) — so it
+  cannot diverge from the path. The future taps are read straight off the
+  route (walk the remaining path at the approach speed and sample the
+  horizons), so the query asks for exactly the trajectory we want. B again
+  cancels, and each leg gives up after `MOVE_TIMEOUT`.
+- **PICK** plays the clip to the end with no re-matching. The entry offset
+  at the stance crossing is ~1-2 cm; the vase snap absorbs it at the grab —
+  the vase takes the recorded grip pose on the palm at that moment and
   follows the hand from then on.
 
 With the trajectory gizmo on (T), MOVE-TO-PICK also shows how its command

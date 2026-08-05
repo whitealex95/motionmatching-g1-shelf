@@ -59,18 +59,20 @@ SHELF_ORIGIN = [1.55, 0.0]
 
 # Move-to-pick: B routes the robot onto the rail (the line through the
 # stance along its heading) 0.6 m behind the stance, then straight in.
-MOVE_ARRIVE_DIST = 0.6      # close and settled counts as arrived (m)
+# The rail aims MOVE_OVERSHOOT past the stance, so the commanded walk never
+# slows into the dead zone; the pick starts when the robot crosses the
+# stance plane, still walking.
+MOVE_OVERSHOOT = 0.35       # the rail target sits this far past the stance (m)
 MOVE_ARRIVE_NEAR = 0.12     # this close counts as arrived right away (m)
 MOVE_ARRIVE_YAW = 0.6       # close enough to the stance heading (rad)
 MOVE_TIMEOUT = 8.0          # give up walking after this long (s)
 
 # During move-to-pick the future taps are read straight off the planned
-# route (walk the remaining path at the approach speed and sample it), so
-# the matcher plays a natural stop at the stance. Whatever offset is left
-# when the grab happens is absorbed by the vase snap.
+# route (walk the remaining path at the approach speed and sample it).
+# Whatever offset is left when the grab happens is absorbed by the vase snap.
 
 # Path snap: inside this radius of the stance the root cannot leave the
 # rail -- the cross-track part of the matched motion is projected out at
 # the given half-life (fast: gone within ~0.3 s).
-SNAP_RADIUS = 1.0
-SNAP_HALFLIFE = 0.06
+SNAP_RADIUS = 2.0
+SNAP_HALFLIFE = 0.1

@@ -195,13 +195,15 @@ class InteractiveViewer:
     def _draw_approach(self):
         m = self.matcher
         root = np.array([m.rootPos[0], m.rootPos[1], _TRAJ_Z])
-        stance = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
+        rail = np.array([np.cos(m.stance_yaw), np.sin(m.stance_yaw), 0.0])
+        end = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z]) \
+            + C.MOVE_OVERSHOOT * rail
         if m.on_rail:
-            self._add_stick(root, stance, _MARK_RGBA)
+            self._add_stick(root, end, _MARK_RGBA)
         else:
             wp = np.array([m.route_wp[0], m.route_wp[1], _TRAJ_Z])
             self._add_stick(root, wp, _MARK_RGBA)
-            self._add_stick(wp, stance, _MARK_RGBA)
+            self._add_stick(wp, end, _MARK_RGBA)
         vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])
         if np.linalg.norm(vel) > 1e-3:
             tip = root + 0.5 * vel

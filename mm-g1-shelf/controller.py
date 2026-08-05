@@ -6,8 +6,10 @@ inertialized cuts. On top sits the pick skill, driven by B:
 
     LOCOMOTION --B--> PICK (idle .. reach .. grasp .. lift .. hold) --> LOCOMOTION
 
-Everything plays back relative to the live root. B enters the pick clip at
-the stance-nearest idle frame and the ride plays to the end; a grab gate at
+Everything plays back relative to the live root. B arms the grab; once the
+entry query loss drops below PICK_ENTER_THRESHOLD the matcher enters the
+pick clip at the stance-nearest idle frame and the ride plays to the end;
+a grab gate at
 the idle->reach boundary aborts stances the arm cannot reach from, and the
 reach-phase arm IK retargets the palm onto the recorded hand trajectory,
 which lands on the vase. When the contact flag turns on, the vase locks to
@@ -88,7 +90,7 @@ class MotionMatcher:
         self.offPP = np.zeros(3); self.offPPVel = np.zeros(3)
         self.offPR = IDENTITY.copy(); self.offPAng = np.zeros(3)
         self.searchTimer = 0.0
-        self.pick_pending = False
+        self.pick_armed = False
         self.pick_locked = 0
         self.grab_checked = False
         self.pick_err = None
@@ -122,11 +124,11 @@ class MotionMatcher:
 
     # --- trigger ------------------------------------------------------------
     def trigger_pick(self):
-        """B: grab the vase. Honoured next step when in locomotion near the
-        shelf and not already holding it."""
+        """B: arm or disarm the grab. While armed, the pick clip starts by
+        itself once the query loss drops below PICK_ENTER_THRESHOLD."""
         if self.pick_locked > 0 or self.state != C.SKILL_LOCO or self.held:
             return
-        self.pick_pending = True
+        self.pick_armed = not self.pick_armed
 
     # --- inertialized cut ---------------------------------------------------
     def _inertialize_into(self, b, lo, hi):
@@ -159,12 +161,10 @@ class MotionMatcher:
             self.pick_best_entry = int(self.pick_enter[k])
 
     def _maybe_trigger_pick(self):
-        if self.pick_best_entry < 0:
-            self.pick_pending = False
+        if (not self.pick_armed or self.pick_best_entry < 0
+                or self.pick_err > C.PICK_ENTER_THRESHOLD):
             return
-        if not self.pick_pending:
-            return
-        self.pick_pending = False
+        self.pick_armed = False
         entry = self.pick_best_entry
         end = int(self.pick_end_of[entry])
         lo, _ = self._clip_bounds(entry)

@@ -4,7 +4,7 @@ Controls
   W / A / S / D ........ move (camera-relative)
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... grab the vase (near the shelf)
+  B .................... arm/disarm the grab; it plays once the match is good
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag orbit | right-drag pan | scroll zoom | Esc quit
@@ -213,8 +213,10 @@ class InteractiveViewer:
                     ("WALK" if speed > 1e-3 else "IDLE"))
             if m.held:
                 head += "  vase in hand"
+            elif m.pick_armed:
+                head += "  ARMED -- grabs when the match is good"
             elif m.near_vase:
-                head += "  [B: grab the vase]"
+                head += "  [B: arm the grab]"
             else:
                 head += "  (walk to the shelf, then B)"
         else:
@@ -229,7 +231,8 @@ class InteractiveViewer:
                 f"frame: {fic}/{length - 1}  (global {cur})\n"
                 f"contact: {'ON' if m.held else 'off'}"
                 f"   gizmo: {'on' if self.show_traj else 'off'} (T)\n"
-                f"query loss: {err}"
+                f"query loss: {err} / thr {C.PICK_ENTER_THRESHOLD:.1f}"
+                + ("  [ARMED]" if m.pick_armed else "")
                 + ("" if C.POST_PROCESSING else "   [post-processing OFF]")
                 + "\n"
                 "WASD move | arrows face | Shift walk | B grab | Space reset\n"

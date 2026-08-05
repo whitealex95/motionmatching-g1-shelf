@@ -66,11 +66,11 @@ def main():
             speed = float(np.clip(1.5 * dist, 0.3, 1.2))
             vel = np.array([*(to_stand / dist * speed), 0.0])
             face = np.array([1.0, 0.0, 0.0])
-        else:                                    # B (retry if the gate aborted)
+        else:                             # arm the grab (re-arm if it aborted)
             face = np.array([1.0, 0.0, 0.0])
-            if attempts < 5:
+            if attempts < 5 and not matcher.pick_armed:
                 matcher.trigger_pick()
-                if matcher.pick_pending:
+                if matcher.pick_armed:
                     attempts += 1
 
         world = matcher.step(vel, face)

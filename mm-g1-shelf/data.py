@@ -91,7 +91,6 @@ def build_library(out=C.LIB_PATH):
         contact=np.concatenate(contact).astype(np.float32),
         phase=np.concatenate(phase).astype(np.int32),
         vase_pos=vase,                       # world, base of the vase
-        shelf_dir=np.array([-1.0, 0.0]),     # the way the shelf faces
         lib_version=np.array(C.LIB_VERSION),
         **tree,
     )

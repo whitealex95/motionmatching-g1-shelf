@@ -7,11 +7,8 @@ The locomotion feature (27-D) is the GenoView one:
   XtrajDir (6)  future sim heading xy at the same horizons
 
 The pick database swaps the trajectory for the interaction blocks:
-  handPos / handVel / handDir (3+3+3)   right palm pose (heading frame)
-  vasePos (2) / shelfDir (2)            where the vase is and which way the
-                                        shelf faces, in the heading frame
-  robotPos (2) / robotDir (2)           robot stance in the static shelf frame
-  held (1)                              vase-in-hand flag {0,1}
+  vasePos (2)   where the vase is, in the robot's heading frame
+  held (1)      vase-in-hand flag {0,1}
 """
 import numpy as np
 from scipy.signal import savgol_filter
@@ -83,25 +80,14 @@ def central_diff_ang(rot, fps):
     return ang
 
 
-def shelf_local_blocks(qh, rootPos, vase_pos, shelf_dir, held):
-    """The live shelf feature blocks, batched (T,...) or single-frame.
-    Returns (vasePos (..2), shelfDir (..2), robotPos (..2), robotDir (..2),
-    held (..1))."""
+def vase_local_blocks(qh, rootPos, vase_pos, held):
+    """The live vase feature blocks, batched (T,...) or single-frame.
+    Returns (vasePos (..2), held (..1))."""
     vase3 = np.zeros(np.shape(rootPos))
     vase3[..., 0:2] = vase_pos[0:2]
-    dir3 = np.zeros(np.shape(rootPos))
-    dir3[..., 0:2] = shelf_dir
     vpos = quat.inv_mul_vec(qh, vase3 - rootPos * np.array([1.0, 1.0, 0.0]))[..., 0:2]
-    vdir = quat.inv_mul_vec(qh, dir3)[..., 0:2]
-    ax = np.asarray(shelf_dir, np.float64)
-    ax = ax / np.linalg.norm(ax)
-    ay = np.array([-ax[1], ax[0]])
-    rel = np.asarray(rootPos)[..., 0:2] - vase_pos[0:2]
-    rpos = np.stack([rel @ ax, rel @ ay], -1)
-    head = quat.mul_vec(qh, FORWARD)[..., 0:2]
-    rdir = np.stack([head @ ax, head @ ay], -1)
     held = np.reshape(held, np.shape(vpos)[:-1] + (1,)).astype(float)
-    return vpos, vdir, rpos, rdir, held
+    return vpos, held
 
 
 def build_db(lib):
@@ -118,8 +104,6 @@ def build_db(lib):
     footR = lib["feet_world"][:, 1].astype(np.float64)
     pelvis = qpos[:, 0:3]
     headDirRaw = heading_dir(rootQuat)
-    handPosW = lib["hand_pos"].astype(np.float64)
-    handDirW = lib["hand_dir"].astype(np.float64)
 
     T = len(qpos)
     simPos = np.zeros((T, 3)); simTheta = np.zeros(T); headDir = np.zeros((T, 3))
@@ -140,7 +124,6 @@ def build_db(lib):
     footLvel, footRvel = clipwise_vel(footL), clipwise_vel(footR)
     pelvisVel, simVel = clipwise_vel(pelvis), clipwise_vel(simPos)
     dofVel, pelvLocalVel = clipwise_vel(dof), clipwise_vel(pelvLocalPos)
-    handVelW = clipwise_vel(handPosW)
     yawRate = np.zeros(T)
     pelvLocalAng = np.zeros((T, 3))
     for rs, re in spans:
@@ -164,12 +147,8 @@ def build_db(lib):
             XtrajDir[rs:re, 2 * k:2 * k + 2] = quat.inv_mul_vec(
                 qh_all[rs:re], headDir[ft])[:, 0:2]
 
-    handPos = to_local(handPosW - simPos)
-    handVel = to_local(handVelW)
-    handDir = to_local(handDirW)
-    vasePos, shelfDir, robotPos, robotDir, held = shelf_local_blocks(
+    vasePos, held = vase_local_blocks(
         qh_all, simPos, lib["vase_pos"].astype(np.float64),
-        lib["shelf_dir"].astype(np.float64),
         lib["contact"].astype(np.float64))
 
     skill = lib["skill"]
@@ -191,14 +170,10 @@ def build_db(lib):
 
     pose = [(Xpos, 1.0), (Xvel, 1.0)]
     traj = [(XtrajPos, 1.0), (XtrajDir, 1.0)]
-    pick = [(handPos, C.HAND_POS_WEIGHT), (handVel, C.HAND_VEL_WEIGHT),
-            (handDir, C.HAND_DIR_WEIGHT), (vasePos, C.VASE_POS_WEIGHT),
-            (shelfDir, C.SHELF_DIR_WEIGHT),
-            (robotPos, C.ROBOT_POS_WEIGHT), (robotDir, C.ROBOT_DIR_WEIGHT),
-            (held, C.HELD_WEIGHT)]
+    pick = [(vasePos, C.VASE_POS_WEIGHT), (held, C.HELD_WEIGHT)]
     dbs = {
         "loco": make_db(pose + traj, masks["loco"]),                 # 27-D
-        "pick": make_db(pose + pick, masks["pick"], std_floor=0.1),  # 33-D
+        "pick": make_db(pose + pick, masks["pick"], std_floor=0.1),  # 18-D
     }
     dbs = {k: dict(X=Xn, offset=off, scale=sc) for k, (Xn, off, sc) in dbs.items()}
 
@@ -209,5 +184,4 @@ def build_db(lib):
         pelvLocalPos=pelvLocalPos, pelvLocalVel=pelvLocalVel,
         pelvLocalRot=pelvLocalRot, pelvLocalAng=pelvLocalAng,
         rawXpos=Xpos, rawXvel=Xvel, rawTrajPos=XtrajPos, rawTrajDir=XtrajDir,
-        rawHandPos=handPos, rawHandVel=handVel, rawHandDir=handDir,
         dbs=dbs)

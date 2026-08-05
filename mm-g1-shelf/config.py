@@ -40,7 +40,7 @@ CLIP_TRIM = {
     "pushAndStumble1_subject5":  (198, 353),
 }
 
-LIB_VERSION = 1
+LIB_VERSION = 2                # v2: dropped shelf_dir from the library
 SEARCH_TAIL = HORIZONS[-1]
 
 CLIPS = ["walk1_subject5", "run1_subject5", "pushAndStumble1_subject5"]
@@ -60,18 +60,12 @@ SHELF_ORIGIN = [1.55, 0.0]
 PICK_TRIGGER_RADIUS = 1.2   # B works within this planar distance of the vase
 
 # B only takes when the entry query loss is below this. Measured bands:
-# settled near the shelf facing the vase ~2-7, facing away ~19, still
-# walking in ~35+. Stance accuracy itself is checked by the grab gate.
+# settled near the shelf facing the vase ~2-5, facing away ~12, still
+# walking ~14+. Stance accuracy itself is checked by the grab gate.
 PICK_ENTER_THRESHOLD = 10.0
 
 # Pick search-feature block weights (one shared std per block, then these).
-HAND_POS_WEIGHT = 0.1 * 1.01
-HAND_VEL_WEIGHT = 0.1 * 0.01
-HAND_DIR_WEIGHT = 0.1 * 1.01
-VASE_POS_WEIGHT = 1.0            # vase pos / shelf facing in the heading frame
-SHELF_DIR_WEIGHT = 1.0
-ROBOT_POS_WEIGHT = 1.0 * 0.01    # robot stance / heading in the shelf frame
-ROBOT_DIR_WEIGHT = 1.0 * 0.01
+VASE_POS_WEIGHT = 1.0            # vase position in the robot's heading frame
 HELD_WEIGHT = 0.1
 
 # Master switch for the grab gate and the reach-phase arm IK overlay.

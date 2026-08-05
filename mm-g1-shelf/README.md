@@ -30,7 +30,7 @@ physics anywhere.
 |---|---|
 | `config.py` | paths, qpos layout, motion-matching and pick settings |
 | `data.py` | build/load the motion library (LAFAN loco + the pick clip) |
-| `features.py` | feature databases: loco (27-D) and pick (33-D) |
+| `features.py` | feature databases: loco (27-D) and pick (18-D) |
 | `controller.py` | the matcher: loco search, B trigger, gate, IK, attachment |
 | `arm_ik.py` | DLS IK on the right arm, body-tree FK |
 | `shelf.py` | pick-clip entry frames |

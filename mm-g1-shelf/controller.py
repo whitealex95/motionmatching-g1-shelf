@@ -22,7 +22,7 @@ import config as C
 import quat
 import shelf
 from arm_ik import ArmIK
-from features import build_db, shelf_local_blocks, yaw_quat, FORWARD, HORIZONS, FPS
+from features import build_db, vase_local_blocks, yaw_quat, FORWARD, HORIZONS, FPS
 from springs import (DecaySpringDamperPosition, DecaySpringDamperRotation,
                      TrajectorySpringPosition, TrajectorySpringRotation)
 
@@ -43,14 +43,11 @@ class MotionMatcher:
         self.prDB, self.paDB = db["pelvLocalRot"], db["pelvLocalAng"]
         self.Xloco = db["dbs"]["loco"]["X"]
         self.rawXpos, self.rawXvel = db["rawXpos"], db["rawXvel"]
-        self.rawHandPos, self.rawHandVel = db["rawHandPos"], db["rawHandVel"]
-        self.rawHandDir = db["rawHandDir"]
         self.clip_id = lib["clip_id"]
         self.skill = lib["skill"]
         self.phase = lib["phase"]
         self.contact = lib["contact"]
         self.vase_rest = lib["vase_pos"].astype(np.float64)   # world, vase base
-        self.shelf_dir = lib["shelf_dir"].astype(np.float64)
         self.Ttimes = HORIZONS / FPS
         TAIL = HORIZONS[-1]
 
@@ -246,10 +243,8 @@ class MotionMatcher:
             parts.append(quat.inv_mul_vec(qh, self.Tpos - self.rootPos)[:, 0:2].ravel())
             parts.append(quat.inv_mul_vec(qh, self.Tdir)[:, 0:2].ravel())
         else:
-            parts.extend([self.rawHandPos[f], self.rawHandVel[f],
-                          self.rawHandDir[f]])
-            parts.extend(shelf_local_blocks(qh, self.rootPos, self.vase_rest,
-                                            self.shelf_dir, float(self.held)))
+            parts.extend(vase_local_blocks(qh, self.rootPos, self.vase_rest,
+                                           float(self.held)))
         q = np.concatenate(parts)
         return (q - d["offset"]) / d["scale"]
 

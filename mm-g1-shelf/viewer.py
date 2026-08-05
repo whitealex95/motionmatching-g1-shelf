@@ -196,7 +196,7 @@ class InteractiveViewer:
         m = self.matcher
         root = np.array([m.rootPos[0], m.rootPos[1], _TRAJ_Z])
         pts = m.route_pts
-        for a, b in zip(pts[:-1:2], pts[2::2]):
+        for a, b in zip(pts[:-1], pts[1:]):
             self._add_stick(np.array([a[0], a[1], _TRAJ_Z]),
                             np.array([b[0], b[1], _TRAJ_Z]), _MARK_RGBA)
         vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])

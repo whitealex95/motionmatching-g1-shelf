@@ -21,6 +21,8 @@ _TRAJ_Z = 0.05
 _SPHERE_R = 0.05
 _STICK_LEN = 0.25
 _STICK_W = 0.012
+_MARK_RGBA = np.array([0.2, 0.8, 0.3, 0.5], np.float32)
+_MARK_R = 0.22
 
 _MOVE_KEYS = {glfw.KEY_W, glfw.KEY_A, glfw.KEY_S, glfw.KEY_D}
 _FACE_KEYS = {glfw.KEY_UP, glfw.KEY_DOWN, glfw.KEY_LEFT, glfw.KEY_RIGHT}
@@ -166,6 +168,8 @@ class InteractiveViewer:
                                    self.scene)
             if self.show_traj:
                 self._draw_command()
+            if not self.matcher.held:
+                self._draw_pick_marker()
             mujoco.mjr_render(viewport, self.scene, self.ctx)
             self._overlay(viewport, self._speed)
 
@@ -179,6 +183,20 @@ class InteractiveViewer:
             base = np.array([px, py, _TRAJ_Z])
             self._add_sphere(base, _SPHERE_R)
             self._add_stick(base, base + _STICK_LEN * np.array([dx, dy, 0.0]))
+
+    # --- pick target marker: a disc on the floor + a heading tick ------------
+    def _draw_pick_marker(self):
+        m = self.matcher
+        center = np.array([m.stance_xy[0], m.stance_xy[1], 0.006])
+        g = self._next_geom()
+        if g is None:
+            return
+        mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_CYLINDER,
+                            np.array([_MARK_R, 0.004, 0.0]), center,
+                            np.eye(3).flatten(), _MARK_RGBA)
+        tick = center + _MARK_R * 1.3 * np.array(
+            [np.cos(m.stance_yaw), np.sin(m.stance_yaw), 0.0])
+        self._add_stick(center, tick, _MARK_RGBA)
 
     def _next_geom(self):
         if self.scene.ngeom >= self.scene.maxgeom:
@@ -195,13 +213,13 @@ class InteractiveViewer:
                             np.array([radius, 0.0, 0.0]), np.asarray(pos, float),
                             np.eye(3).flatten(), _TRAJ_RGBA)
 
-    def _add_stick(self, p0, p1):
+    def _add_stick(self, p0, p1, rgba=_TRAJ_RGBA):
         g = self._next_geom()
         if g is None:
             return
         mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_CAPSULE,
                             np.zeros(3), np.zeros(3), np.eye(3).flatten(),
-                            _TRAJ_RGBA)
+                            rgba)
         mujoco.mjv_connector(g, mujoco.mjtGeom.mjGEOM_CAPSULE, _STICK_W,
                              np.asarray(p0, float), np.asarray(p1, float))
 

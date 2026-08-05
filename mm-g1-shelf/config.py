@@ -64,5 +64,7 @@ SHELF_ORIGIN = [1.55, 0.0]
 MOVE_ARRIVE_DIST = 0.35     # close enough to the stance (m)
 MOVE_ARRIVE_YAW = 0.6       # close enough to the stance heading (rad)
 MOVE_FACE_DIST = 0.6        # face the stance heading from this distance in
-MOVE_LOCK_HALFLIFE = 0.2    # blend of the last root offset once PICK starts
+MOVE_LOCK_HALFLIFE = 0.075  # blend of the last root offset once PICK starts;
+                            # same rate as the pose blend (INERT_HALFLIFE),
+                            # so the correction hides inside the transition
 MOVE_TIMEOUT = 8.0          # give up walking after this long (s)

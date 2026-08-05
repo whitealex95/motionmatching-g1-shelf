@@ -109,9 +109,9 @@ class MotionMatcher:
         self.pick_locked = 0
         self.move_timer = 0.0
         self.on_rail = False
-        self.move_target = self.stance_xy.copy()
         self.route_wp = self.stance_xy - 0.6 * np.array(
             [np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+        self.route_pts = [self.rootPos[0:2].copy(), self.stance_xy.copy()]
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
         self.cmdFace = np.zeros(3)
@@ -158,39 +158,80 @@ class MotionMatcher:
         self.animFrame, self.lo, self.hi = int(b), int(lo), int(hi)
 
     # --- move-to-pick --------------------------------------------------------
+    def _route_points(self):
+        """The planned route as a polyline from the robot to the overshoot
+        target: straight to the way-in point, a rounded corner there, then
+        straight in along the rail. The corner arc keeps the heading
+        turning continuously -- no sharp bend, no sudden yaw."""
+        rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
+        end = self.stance_xy + C.MOVE_OVERSHOOT * rail
+        p0 = self.rootPos[0:2]
+        if self.on_rail:
+            return [p0, end]
+        wp = self.route_wp
+        d1 = wp - p0
+        L1 = float(np.linalg.norm(d1))
+        if L1 < 1e-6:
+            return [p0, end]
+        d1 = d1 / L1
+        ang = float(np.arccos(np.clip(d1 @ rail, -1.0, 1.0)))
+        if ang < 0.15:
+            return [p0, end]
+        # Round the corner at the way-in point with radius ~0.25 m; cap the
+        # fillet so sharp approach angles keep a real straight leg.
+        t = min(0.25 * np.tan(ang / 2.0), 0.3, 0.6 * L1,
+                0.5 * float(np.linalg.norm(end - wp)))
+        A = wp - d1 * t
+        B = wp + rail * t
+        corner = [(1 - s) ** 2 * A + 2 * (1 - s) * s * wp + s * s * B
+                  for s in np.linspace(0.0, 1.0, 9)[1:-1]]
+        return [p0, A] + corner + [B, end]
+
     def _steer_to_stance(self):
-        """Walk onto the rail behind the stance first, then straight in
-        along the stance heading -- plain forward walking, which the data
-        has, instead of sideways shuffling, which it does not."""
+        """Walk the planned route: toward a look-ahead point on the curve,
+        facing the travel direction -- plain forward walking, which the
+        data has, instead of sideways shuffling, which it does not."""
         rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
         rel = self.rootPos[0:2] - self.stance_xy
         along = float(rel @ rail)
         n = float(np.linalg.norm(rel - along * rail))
         wp = self.stance_xy - 0.6 * rail
         self.route_wp = wp
-        # Latch onto the final leg; only fall back off it on a big miss.
+        # Latch onto the final leg once the curve has merged with the rail;
+        # only fall back off it on a big miss.
         if not self.on_rail:
-            if ((along < -0.25 and n < 0.25)
-                    or float(np.linalg.norm(self.rootPos[0:2] - wp)) < 0.2):
+            if along < -0.1 and n < 0.15:
                 self.on_rail = True
                 self.move_timer = 0.0      # fresh time budget for the last leg
         elif n > 0.45 or along > 0.1:
             self.on_rail = False
-        # The rail target sits past the stance, so the walk stays above the
-        # dead zone; PICK starts at the stance crossing, not at a stop.
-        phantom = self.stance_xy + C.MOVE_OVERSHOOT * rail
-        target = phantom if self.on_rail else wp
-        self.move_target = target
-        to = target - self.rootPos[0:2]
+
+        route = self._route_points()
+        self.route_pts = route
+        # Route length and the look-ahead point ~0.45 m down the curve.
+        look = route[-1]
+        total = 0.0
+        acc = 0.0
+        prev = route[0]
+        found = False
+        for p in route[1:]:
+            seg = float(np.linalg.norm(p - prev))
+            total += seg
+            if not found:
+                acc += seg
+                if acc >= 0.45:
+                    look = p
+                    found = True
+            prev = p
+
+        to = look - self.rootPos[0:2]
         dist = float(np.linalg.norm(to))
         vel = np.zeros(3)
         if dist > 1e-6:
-            speed = float(np.clip(1.8 * dist, 0.25, 1.2))
+            speed = float(np.clip(1.8 * total, 0.25, 1.2))
             vel[0:2] = to / dist * speed
-        if self.on_rail or dist < 1e-6:
-            face = np.array([rail[0], rail[1], 0.0])
-        else:
-            face = vel / (np.linalg.norm(vel) + 1e-9)
+        face = (vel / (np.linalg.norm(vel) + 1e-9) if dist > 1e-6
+                else np.array([rail[0], rail[1], 0.0]))
         return vel, face
 
     def _at_stance(self):
@@ -244,10 +285,7 @@ class MotionMatcher:
         remaining path (current position -> point behind the stance ->
         stance) at the approach speed profile and sample the horizons. We
         know the trajectory we want, so the query asks for exactly it."""
-        rail = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
-        end = self.stance_xy + C.MOVE_OVERSHOOT * rail
-        pts = [] if self.on_rail else [self.route_wp.copy()]
-        pts.append(end)
+        pts = [p.copy() for p in self.route_pts[1:]]
         pos = self.rootPos[0:2].copy()
         heading = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
         k = 0

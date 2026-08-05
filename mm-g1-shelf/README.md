@@ -13,9 +13,10 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
 ```
 
 - **MOVE-TO-PICK** is still motion matching, but the walking command is made
-  by the controller. It routes the walk: first to a point 0.6 m behind the
-  stance along its heading, then straight in facing forward, which is plain
-  walking the data has. The rail aims `MOVE_OVERSHOOT` past the stance, so
+  by the controller. It routes the walk: straight toward a point 0.6 m
+  behind the stance, around a rounded corner there (a small arc, so the
+  heading turns continuously), then straight in facing forward, which is
+  plain walking the data has. The rail aims `MOVE_OVERSHOOT` past the stance, so
   the commanded walk never slows into the slow-walk dead zone; the pick
   starts the moment the robot crosses the stance plane, still walking. On
   the final leg the root is snapped to the rail — the cross-track and yaw

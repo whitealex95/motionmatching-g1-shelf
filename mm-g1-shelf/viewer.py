@@ -4,7 +4,7 @@ Controls
   W / A / S / D ........ move (camera-relative)
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... play the pick clip; the vase snaps onto the hand
+  B .................... pick up the vase (walks to the shelf by itself)
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag orbit | right-drag pan | scroll zoom | Esc quit
@@ -214,7 +214,9 @@ class InteractiveViewer:
             if m.held:
                 head += "  vase in hand"
             else:
-                head += "  [B: play the pick]"
+                head += "  [B: pick up the vase]"
+        elif state == "MOVE-TO-PICK":
+            head = "WALKING TO THE SHELF  [B: cancel]"
         else:
             head = "PICKING UP THE VASE"
         lib, cur = m.lib, m.cur

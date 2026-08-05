@@ -6,13 +6,27 @@ Part 2: interactive motion matching with the shelf pick.
 python ../run.py           # or: python run.py from the repo root
 ```
 
-Walk with WASD. Press **B** and the pick clip plays where the robot stands:
-the matcher cuts into the clip at its last idle frame and the ride plays to
-the end, with no re-matching during it. When the clip's contact flag turns
-on, the vase snaps onto the right palm — it takes the grip pose recorded at
-the clip's own grab frame — and follows the hand from then on, through the
-lift, the hold, and back in locomotion. Everything is kinematic; there is
-no physics anywhere.
+Walk with WASD. Press **B** and the pick runs as a small state machine:
+
+```
+LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
+```
+
+- **MOVE-TO-PICK** is still motion matching, but the walking command is made
+  by the controller: walk toward the clip's recorded stance (its root pose
+  at the pick entry frame), facing the travel direction and then the stance
+  heading. Every step it checks whether the robot is close enough (position
+  and heading); B again cancels, and it gives up after `MOVE_TIMEOUT`.
+- **PICK** plays the clip to the end with no re-matching. The small root
+  offset left over from walking is blended away during the clip's idle
+  frames (`MOVE_LOCK_HALFLIFE`), so the clip runs from the exact recorded
+  stance and the hand meets the vase. When the clip's contact flag turns
+  on, the vase snaps onto the right palm with the recorded grip pose and
+  follows the hand from then on.
+
+Everything is kinematic; there is no physics anywhere. There is also no
+path planning: move-to-pick walks straight at the stance, so starting
+behind the shelf walks through it.
 
 | file | role |
 |---|---|

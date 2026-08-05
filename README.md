@@ -10,7 +10,7 @@ The project has two parts:
 | part | folder | what it does |
 |---|---|---|
 | 1. Scene from one clip | `datagen-g1-shelf/` | Read the kimodo pick-up motion, find where the right hand stops, put a shelf and a vase there, and render the clip. |
-| 2. Motion matching | `mm-g1-shelf/` | Interactive motion matching (WASD): walk to the shelf, press **B**, and the robot grabs the vase. |
+| 2. Motion matching | `mm-g1-shelf/` | Interactive motion matching (WASD): press **B** and the robot walks to the shelf and grabs the vase. |
 
 ```bash
 python run.py        # interactive motion matching with the shelf

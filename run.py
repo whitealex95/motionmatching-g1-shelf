@@ -4,15 +4,15 @@
     python run.py                # open the viewer
     python run.py --build-only   # build/refresh the motion library cache and exit
 
-Drive the G1 with WASD and press B: the pick clip plays where the robot
-stands, and the vase snaps onto the right hand at the grab -- then walk
-away with it.
+Drive the G1 with WASD and press B: the robot walks to the pick spot by
+itself, plays the pick clip, and the vase snaps onto the right hand at the
+grab -- then walk away with it.
 
 Controls
   W / A / S / D ........ move, relative to the camera
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... play the pick clip; the vase snaps onto the hand
+  B .................... pick up the vase (walks to the shelf by itself)
   Space ................ reset robot and vase
   T .................... toggle the command trajectory gizmo
   Left-drag / right-drag / scroll ... orbit / pan / zoom

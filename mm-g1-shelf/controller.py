@@ -1,11 +1,19 @@
-"""Real-time motion matching for walking, plus a scripted pick on B.
+"""Real-time motion matching for walking, plus the pick skill on B.
 
 The locomotion core is the same as motionmatching-g1-door: a smoothed
 "simulation root" the matcher tracks + integrates, per-clip KD-tree search,
-inertialized cuts. B simply cuts into the pick clip (no matching, no reach
-check) and plays it to the end, relative to wherever the robot stands.
-When the clip's contact flag turns on, the vase snaps onto the right palm
-with the grip pose recorded in the clip, and follows the hand from then on.
+inertialized cuts. The pick runs as a small state machine:
+
+    LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
+
+MOVE-TO-PICK is still motion matching, but the command is made here: walk
+toward the clip's recorded stance (its root pose at the pick entry frame),
+so the trajectory query is built from the current state and the pick spot.
+Once the robot is close enough, PICK plays the clip to the end with no
+re-matching; the last root offset to the exact stance blends away during
+the idle frames, so the hand lands on the vase. When the clip's contact
+flag turns on, the vase snaps onto the right palm with the recorded grip
+pose and follows the hand from then on.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -20,6 +28,12 @@ from springs import (DecaySpringDamperPosition, DecaySpringDamperRotation,
 DT = C.DT
 NDOF = 29
 IDENTITY = np.array([1.0, 0.0, 0.0, 0.0])
+STATE_MOVE = 2                       # controller-only; clips are LOCO or PICK
+
+
+def wrap_angle(a):
+    """Wrap to (-pi, pi]."""
+    return (a + np.pi) % (2.0 * np.pi) - np.pi
 
 
 class MotionMatcher:
@@ -51,12 +65,16 @@ class MotionMatcher:
             self.loco_trees.append((int(rs), int(re),
                                     cKDTree(self.Xloco[rs:re - TAIL])))
 
-        # The pick clip: B enters at its last idle frame, plays to the end.
+        # The pick clip: entered at its last idle frame, played to the end.
         pick_rows = np.where(self.skill == C.SKILL_PICK)[0]
         lo, hi = self._clip_bounds(int(pick_rows[0]))
         idle = np.where(self.phase[lo:hi] == C.PHASE_IDLE)[0]
         self.pick_entry = lo + int(idle[-1])
         self.pick_lo, self.pick_hi = lo, hi
+
+        # The recorded stance: where move-to-pick walks to.
+        self.stance_xy = self.simPosDB[self.pick_entry][:2].copy()
+        self.stance_yaw = float(self.simThetaDB[self.pick_entry])
 
         # The grip: palm -> vase pose at the clip's own grab frame. When the
         # contact flag turns on, the vase snaps to this pose on the live palm.
@@ -88,6 +106,10 @@ class MotionMatcher:
         self.searchTimer = 0.0
         self.pick_pending = False
         self.pick_locked = 0
+        self.move_timer = 0.0
+        # Root offset to the exact stance, blended away once PICK starts.
+        self.lockPos = np.zeros(2)
+        self.lockYaw = 0.0
         # The vase: on the shelf until the grab, then stuck to the palm.
         self.held = False
         self.vase_pos = self.vase_rest.copy()
@@ -104,12 +126,16 @@ class MotionMatcher:
         return self.animFrame
 
     def state_name(self):
-        return {C.SKILL_LOCO: "LOCOMOTION", C.SKILL_PICK: "PICK"}[self.state]
+        return {C.SKILL_LOCO: "LOCOMOTION", C.SKILL_PICK: "PICK",
+                STATE_MOVE: "MOVE-TO-PICK"}[self.state]
 
     # --- trigger ------------------------------------------------------------
     def trigger_pick(self):
-        """B: play the pick clip. Honoured next step when in locomotion and
-        not already holding the vase."""
+        """B: walk to the pick stance and play the clip. Pressing B again
+        while walking there cancels."""
+        if self.state == STATE_MOVE:
+            self.state = C.SKILL_LOCO
+            return
         if self.pick_locked > 0 or self.state != C.SKILL_LOCO or self.held:
             return
         self.pick_pending = True
@@ -126,14 +152,38 @@ class MotionMatcher:
         self.offPAng = (self.offPAng + self.paDB[a]) - self.paDB[b]
         self.animFrame, self.lo, self.hi = int(b), int(lo), int(hi)
 
-    def _maybe_trigger_pick(self):
-        pending, self.pick_pending = self.pick_pending, False
-        if not pending:
-            return
+    # --- move-to-pick --------------------------------------------------------
+    def _steer_to_stance(self):
+        """The walking command toward the recorded stance: velocity scaled by
+        distance; face the travel direction, then the stance heading."""
+        to = self.stance_xy - self.rootPos[:2]
+        dist = float(np.linalg.norm(to))
+        vel = np.zeros(3)
+        if dist > 1e-6:
+            speed = float(np.clip(1.8 * dist, 0.25, 1.2))
+            vel[0:2] = to / dist * speed
+        if dist > 0.4:
+            face = vel / (np.linalg.norm(vel) + 1e-9)
+        else:
+            face = np.array([np.cos(self.stance_yaw),
+                             np.sin(self.stance_yaw), 0.0])
+        return vel, face
+
+    def _at_stance(self):
+        dist = float(np.linalg.norm(self.stance_xy - self.rootPos[:2]))
+        dyaw = abs(wrap_angle(self.stance_yaw - self.rootYaw))
+        return dist < C.MOVE_ARRIVE_DIST and dyaw < C.MOVE_ARRIVE_YAW
+
+    def _enter_pick(self):
+        """Cut into the pick clip. The root offset left over from walking is
+        blended away while the clip's idle frames play, so the clip runs
+        from the exact recorded stance by the time the hand reaches out."""
         self._inertialize_into(self.pick_entry, self.pick_lo, self.pick_hi)
         self.state = C.SKILL_PICK
         self.pick_locked = self.pick_hi - 1 - self.pick_entry
         self.searchTimer = C.SEARCH_TIME
+        self.lockPos = self.stance_xy - self.rootPos[:2]
+        self.lockYaw = wrap_angle(self.stance_yaw - self.rootYaw)
 
     def _end_skill(self):
         """Pick finished: search locomotion and blend back."""
@@ -198,9 +248,25 @@ class MotionMatcher:
     def step(self, desiredVel, desiredFace):
         """Advance one frame. Returns the world qpos (36,) to play back; the
         vase pose is kept on self.vase_pos / self.vase_quat / self.held."""
+        if self.pick_pending:
+            self.pick_pending = False
+            self.state = STATE_MOVE
+            self.move_timer = 0.0
+
+        # Move-to-pick drives itself: the player command is replaced by the
+        # walk toward the recorded stance.
+        if self.state == STATE_MOVE:
+            self.move_timer += DT
+            desiredVel, desiredFace = self._steer_to_stance()
+            if self._at_stance():
+                self._enter_pick()
+                desiredVel = np.zeros(3)
+                desiredFace = np.zeros(3)
+            elif self.move_timer > C.MOVE_TIMEOUT:
+                self.state = C.SKILL_LOCO
+
         desiredVel = np.asarray(desiredVel, float)
         self._predict_trajectory(desiredVel, desiredFace)
-        self._maybe_trigger_pick()
 
         if self.searchTimer <= 0.0 and self.pick_locked == 0:
             self._search_loco()
@@ -226,6 +292,13 @@ class MotionMatcher:
         self.rootAng = np.array([0.0, 0.0, self.yawRateDB[f]])
         self.rootPos = self.rootPos + self.rootVel * DT
         self.rootYaw = self.rootYaw + self.yawRateDB[f] * DT
+
+        # Blend the leftover stance offset away (set when PICK started).
+        a = 1.0 - 0.5 ** (DT / C.MOVE_LOCK_HALFLIFE)
+        self.rootPos[0:2] += a * self.lockPos
+        self.rootYaw += a * self.lockYaw
+        self.lockPos = (1.0 - a) * self.lockPos
+        self.lockYaw = (1.0 - a) * self.lockYaw
         self.rootRot = yaw_quat(self.rootYaw)
 
         if riding and self.pick_locked == 0:

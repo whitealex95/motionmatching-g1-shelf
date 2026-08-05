@@ -56,3 +56,9 @@ PHASE_IDLE, PHASE_REACH, PHASE_GRASP, PHASE_LIFT, PHASE_HOLD = range(5)
 # The whole recorded scene (shelf + vase + stance) is moved by this much,
 # so the robot spawns at the origin and the shelf sits ahead of it.
 SHELF_ORIGIN = [1.55, 0.0]
+
+# Move-to-pick: B walks the robot to the clip's recorded stance first.
+MOVE_ARRIVE_DIST = 0.15     # close enough to the stance (m)
+MOVE_ARRIVE_YAW = 0.4       # close enough to the stance heading (rad)
+MOVE_LOCK_HALFLIFE = 0.2    # blend of the last root offset once PICK starts
+MOVE_TIMEOUT = 8.0          # give up walking after this long (s)

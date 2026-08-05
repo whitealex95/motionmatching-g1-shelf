@@ -23,6 +23,8 @@ _STICK_LEN = 0.25
 _STICK_W = 0.012
 _MARK_RGBA = np.array([0.2, 0.8, 0.3, 0.5], np.float32)
 _MARK_R = 0.22
+_CMD_VEL_RGBA = np.array([0.2, 0.5, 0.95, 1.0], np.float32)
+_CMD_FACE_RGBA = np.array([0.95, 0.8, 0.15, 1.0], np.float32)
 
 _MOVE_KEYS = {glfw.KEY_W, glfw.KEY_A, glfw.KEY_S, glfw.KEY_D}
 _FACE_KEYS = {glfw.KEY_UP, glfw.KEY_DOWN, glfw.KEY_LEFT, glfw.KEY_RIGHT}
@@ -168,6 +170,8 @@ class InteractiveViewer:
                                    self.scene)
             if self.show_traj:
                 self._draw_command()
+                if self.matcher.state_name() == "MOVE-TO-PICK":
+                    self._draw_approach()
             if not self.matcher.held:
                 self._draw_pick_marker()
             mujoco.mjr_render(viewport, self.scene, self.ctx)
@@ -183,6 +187,25 @@ class InteractiveViewer:
             base = np.array([px, py, _TRAJ_Z])
             self._add_sphere(base, _SPHERE_R)
             self._add_stick(base, base + _STICK_LEN * np.array([dx, dy, 0.0]))
+
+    # --- approach gizmo: how move-to-pick makes its command ------------------
+    # green line = path to the stance, blue arrow = commanded velocity,
+    # yellow tick = commanded facing. The red trajectory (T) shows what the
+    # springs predict from that command.
+    def _draw_approach(self):
+        m = self.matcher
+        root = np.array([m.rootPos[0], m.rootPos[1], _TRAJ_Z])
+        target = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
+        self._add_stick(root, target, _MARK_RGBA)
+        vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])
+        if np.linalg.norm(vel) > 1e-3:
+            tip = root + 0.5 * vel
+            self._add_stick(root, tip, _CMD_VEL_RGBA)
+            self._add_sphere(tip, 0.03, _CMD_VEL_RGBA)
+        face = np.array([m.cmdFace[0], m.cmdFace[1], 0.0])
+        if np.linalg.norm(face) > 1e-3:
+            self._add_stick(root + [0, 0, 0.1],
+                            root + [0, 0, 0.1] + 0.3 * face, _CMD_FACE_RGBA)
 
     # --- pick target marker: a disc on the floor + a heading tick ------------
     def _draw_pick_marker(self):
@@ -205,13 +228,13 @@ class InteractiveViewer:
         self.scene.ngeom += 1
         return g
 
-    def _add_sphere(self, pos, radius):
+    def _add_sphere(self, pos, radius, rgba=_TRAJ_RGBA):
         g = self._next_geom()
         if g is None:
             return
         mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_SPHERE,
                             np.array([radius, 0.0, 0.0]), np.asarray(pos, float),
-                            np.eye(3).flatten(), _TRAJ_RGBA)
+                            np.eye(3).flatten(), rgba)
 
     def _add_stick(self, p0, p1, rgba=_TRAJ_RGBA):
         g = self._next_geom()

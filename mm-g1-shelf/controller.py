@@ -111,6 +111,11 @@ class MotionMatcher:
         # Root offset to the exact stance, blended away once PICK starts.
         self.lockPos = np.zeros(2)
         self.lockYaw = 0.0
+        # The command actually fed to the matcher (shown by the viewer).
+        self.cmdVel = np.zeros(3)
+        self.cmdFace = np.zeros(3)
+        self.pelvis_speed = 0.0
+        self._prev_pelvis = None
         # The vase: on the shelf until the grab, then stuck to the palm.
         self.held = False
         self.vase_pos = self.vase_rest.copy()
@@ -267,6 +272,8 @@ class MotionMatcher:
                 self.state = C.SKILL_LOCO
 
         desiredVel = np.asarray(desiredVel, float)
+        self.cmdVel = desiredVel.copy()
+        self.cmdFace = np.asarray(desiredFace, float).copy()
         self._predict_trajectory(desiredVel, desiredFace)
 
         if self.searchTimer <= 0.0 and self.pick_locked == 0:
@@ -294,8 +301,26 @@ class MotionMatcher:
         self.rootPos = self.rootPos + self.rootVel * DT
         self.rootYaw = self.rootYaw + self.yawRateDB[f] * DT
 
-        # Blend the leftover stance offset away (set when PICK started).
-        a = 1.0 - 0.5 ** (DT / C.MOVE_LOCK_HALFLIFE)
+        # Warp toward the stance while walking there: bend each step a bit
+        # sideways, never by more than a fraction of the real motion, so
+        # planted feet do not slide. The heading is left alone -- the matcher
+        # needs to turn freely, and the leftover yaw blends away at entry.
+        if self.state == STATE_MOVE:
+            v = self.rootVel[0:2]
+            step_len = float(np.linalg.norm(v)) * DT
+            if step_len > 1e-5:
+                fwd = v / (np.linalg.norm(v) + 1e-9)
+                err = self.stance_xy - self.rootPos[0:2]
+                cross = err - float(err @ fwd) * fwd
+                n = float(np.linalg.norm(cross))
+                if n > 1e-6:
+                    self.rootPos[0:2] += min(C.MOVE_WARP_GAIN * step_len, n) * cross / n
+
+        # Blend the leftover stance offset away (set when PICK started),
+        # only while the body still moves -- never on planted feet.
+        s0, s1 = C.LOCK_SPEED_BAND
+        gate = float(np.clip((self.pelvis_speed - s0) / (s1 - s0), 0.0, 1.0))
+        a = gate * (1.0 - 0.5 ** (DT / C.MOVE_LOCK_HALFLIFE))
         self.rootPos[0:2] += a * self.lockPos
         self.rootYaw += a * self.lockYaw
         self.lockPos = (1.0 - a) * self.lockPos
@@ -324,6 +349,12 @@ class MotionMatcher:
         qpos[0:3] = pelvWorldPos
         qpos[3:7] = pelvWorldRot
         qpos[7:] = dofOut
+
+        # Measured body speed, used to gate the offset blend next frame.
+        if self._prev_pelvis is not None:
+            self.pelvis_speed = float(
+                np.linalg.norm(qpos[0:2] - self._prev_pelvis)) / DT
+        self._prev_pelvis = qpos[0:2].copy()
 
         # The vase: snap onto the palm when the contact flag turns on, then
         # follow the hand with the recorded grip pose.

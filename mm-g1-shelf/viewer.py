@@ -1,0 +1,239 @@
+"""Interactive GLFW + MuJoCo viewer: drive the G1 with the keyboard.
+
+Controls
+  W / A / S / D ........ move (camera-relative)
+  Arrow keys ........... face direction, independent of travel
+  Shift (hold) ......... walk instead of run
+  B .................... grab the vase (near the shelf)
+  Space ................ reset robot and vase
+  T .................... toggle the command trajectory gizmo
+  Left-drag orbit | right-drag pan | scroll zoom | Esc quit
+"""
+import math
+import numpy as np
+import glfw
+import mujoco
+
+import config as C
+
+_TRAJ_RGBA = np.array([0.9, 0.1, 0.1, 1.0], np.float32)
+_TRAJ_Z = 0.05
+_SPHERE_R = 0.05
+_STICK_LEN = 0.25
+_STICK_W = 0.012
+
+_MOVE_KEYS = {glfw.KEY_W, glfw.KEY_A, glfw.KEY_S, glfw.KEY_D}
+_FACE_KEYS = {glfw.KEY_UP, glfw.KEY_DOWN, glfw.KEY_LEFT, glfw.KEY_RIGHT}
+
+
+class InteractiveViewer:
+    def __init__(self, scene, matcher, width=1280, height=720,
+                 title="Motion Matching G1 - walk to the shelf, press B"):
+        self.scene_sim = scene
+        self.model = scene.model
+        self.data = scene.data
+        self.matcher = matcher
+
+        if not glfw.init():
+            raise RuntimeError(
+                "glfw.init() failed -- this viewer needs a display "
+                "(MUJOCO_GL=glfw on a machine with X).")
+        self.window = glfw.create_window(width, height, title, None, None)
+        if not self.window:
+            glfw.terminate()
+            raise RuntimeError("Failed to create a GLFW window (no display?).")
+        glfw.make_context_current(self.window)
+        glfw.swap_interval(1)
+
+        self.cam = mujoco.MjvCamera()
+        self.opt = mujoco.MjvOption()
+        self.scene = mujoco.MjvScene(self.model, maxgeom=10000)
+        self.ctx = mujoco.MjrContext(self.model, mujoco.mjtFontScale.mjFONTSCALE_150)
+
+        self.cam.azimuth = 135.0
+        self.cam.elevation = -20.0
+        self.cam.distance = 4.0
+        self.cam.lookat[:] = [0.0, 0.0, 0.8]
+
+        self.held = set()
+        self.shift = False
+        self.show_traj = True
+        self._speed = 0.0
+        self._mouse_last = None
+        self._button = {"left": False, "right": False}
+
+        glfw.set_key_callback(self.window, self._on_key)
+        glfw.set_mouse_button_callback(self.window, self._on_mouse_button)
+        glfw.set_cursor_pos_callback(self.window, self._on_cursor)
+        glfw.set_scroll_callback(self.window, self._on_scroll)
+
+    # --- input callbacks -----------------------------------------------------
+    def _on_key(self, window, key, scancode, action, mods):
+        self.shift = bool(mods & glfw.MOD_SHIFT)
+        if action == glfw.PRESS:
+            if key == glfw.KEY_ESCAPE:
+                glfw.set_window_should_close(window, True)
+            elif key == glfw.KEY_SPACE:
+                self.matcher.reset()
+                self.scene_sim.reset()
+            elif key == glfw.KEY_T:
+                self.show_traj = not self.show_traj
+            elif key == glfw.KEY_B:
+                self.matcher.trigger_pick()
+            elif key in _MOVE_KEYS or key in _FACE_KEYS:
+                self.held.add(key)
+        elif action == glfw.RELEASE:
+            self.held.discard(key)
+
+    def _on_mouse_button(self, window, button, action, mods):
+        press = action == glfw.PRESS
+        if button == glfw.MOUSE_BUTTON_LEFT:
+            self._button["left"] = press
+        elif button == glfw.MOUSE_BUTTON_RIGHT:
+            self._button["right"] = press
+        self._mouse_last = glfw.get_cursor_pos(window) if press else None
+
+    def _on_cursor(self, window, xpos, ypos):
+        if self._mouse_last is None:
+            return
+        dx = xpos - self._mouse_last[0]
+        dy = ypos - self._mouse_last[1]
+        self._mouse_last = (xpos, ypos)
+        w, h = glfw.get_window_size(window)
+        if self._button["left"]:
+            action = mujoco.mjtMouse.mjMOUSE_ROTATE_V
+        elif self._button["right"]:
+            action = mujoco.mjtMouse.mjMOUSE_MOVE_V
+        else:
+            return
+        mujoco.mjv_moveCamera(self.model, action, dx / h, dy / h,
+                              self.scene, self.cam)
+
+    def _on_scroll(self, window, xoffset, yoffset):
+        mujoco.mjv_moveCamera(self.model, mujoco.mjtMouse.mjMOUSE_ZOOM,
+                              0.0, -0.05 * yoffset, self.scene, self.cam)
+
+    # --- per-frame command from the keys -------------------------------------
+    def _command(self):
+        fwd = math.radians(self.cam.azimuth)
+        right = fwd - math.pi / 2.0
+        fdir = np.array([math.cos(fwd), math.sin(fwd), 0.0])
+        rdir = np.array([math.cos(right), math.sin(right), 0.0])
+        move = np.zeros(3)
+        if glfw.KEY_W in self.held: move += fdir
+        if glfw.KEY_S in self.held: move -= fdir
+        if glfw.KEY_D in self.held: move += rdir
+        if glfw.KEY_A in self.held: move -= rdir
+        face = np.zeros(3)
+        if glfw.KEY_UP in self.held:    face += fdir
+        if glfw.KEY_DOWN in self.held:  face -= fdir
+        if glfw.KEY_RIGHT in self.held: face += rdir
+        if glfw.KEY_LEFT in self.held:  face -= rdir
+
+        m = np.linalg.norm(move)
+        if m > 1e-6:
+            move = move / m * (C.MAX_SPEED * (C.WALK_SCALE if self.shift else 1.0))
+        else:
+            move = np.zeros(3)
+        f = np.linalg.norm(face)
+        face = face / f if f > 1e-6 else np.zeros(3)
+        return move, face
+
+    # --- main loop -----------------------------------------------------------
+    def run(self):
+        last = glfw.get_time()
+        acc = 0.0
+        while not glfw.window_should_close(self.window):
+            now = glfw.get_time()
+            acc += now - last
+            last = now
+
+            while acc >= C.DT:
+                vel, face = self._command()
+                self._speed = float(np.linalg.norm(vel))
+                world = self.matcher.step(vel, face)
+                self.scene_sim.step(world, self.matcher.vase_pos,
+                                    self.matcher.vase_quat, self.matcher.held)
+                acc -= C.DT
+
+            self.cam.lookat[0] = float(self.data.qpos[0])
+            self.cam.lookat[1] = float(self.data.qpos[1])
+
+            w, h = glfw.get_framebuffer_size(self.window)
+            viewport = mujoco.MjrRect(0, 0, w, h)
+            mujoco.mjv_updateScene(self.model, self.data, self.opt, None,
+                                   self.cam, mujoco.mjtCatBit.mjCAT_ALL,
+                                   self.scene)
+            if self.show_traj:
+                self._draw_command()
+            mujoco.mjr_render(viewport, self.scene, self.ctx)
+            self._overlay(viewport, self._speed)
+
+            glfw.swap_buffers(self.window)
+            glfw.poll_events()
+        glfw.terminate()
+
+    # --- command trajectory gizmo --------------------------------------------
+    def _draw_command(self):
+        for (px, py, _), (dx, dy, _) in zip(self.matcher.Tpos, self.matcher.Tdir):
+            base = np.array([px, py, _TRAJ_Z])
+            self._add_sphere(base, _SPHERE_R)
+            self._add_stick(base, base + _STICK_LEN * np.array([dx, dy, 0.0]))
+
+    def _next_geom(self):
+        if self.scene.ngeom >= self.scene.maxgeom:
+            return None
+        g = self.scene.geoms[self.scene.ngeom]
+        self.scene.ngeom += 1
+        return g
+
+    def _add_sphere(self, pos, radius):
+        g = self._next_geom()
+        if g is None:
+            return
+        mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_SPHERE,
+                            np.array([radius, 0.0, 0.0]), np.asarray(pos, float),
+                            np.eye(3).flatten(), _TRAJ_RGBA)
+
+    def _add_stick(self, p0, p1):
+        g = self._next_geom()
+        if g is None:
+            return
+        mujoco.mjv_initGeom(g, mujoco.mjtGeom.mjGEOM_CAPSULE,
+                            np.zeros(3), np.zeros(3), np.eye(3).flatten(),
+                            _TRAJ_RGBA)
+        mujoco.mjv_connector(g, mujoco.mjtGeom.mjGEOM_CAPSULE, _STICK_W,
+                             np.asarray(p0, float), np.asarray(p1, float))
+
+    def _overlay(self, viewport, speed):
+        m = self.matcher
+        state = m.state_name()
+        if state == "LOCOMOTION":
+            head = ("RUN" if speed > C.MAX_SPEED * (1 + C.WALK_SCALE) / 2 else
+                    ("WALK" if speed > 1e-3 else "IDLE"))
+            if m.held:
+                head += "  vase in hand"
+            elif m.near_vase:
+                head += "  [B: grab the vase]"
+            else:
+                head += "  (walk to the shelf, then B)"
+        else:
+            head = "PICKING UP THE VASE"
+        lib, cur = m.lib, m.cur
+        cid = int(lib["clip_id"][cur])
+        clip = lib["clip_names"][cid]
+        fic, length = int(lib["frame_in_clip"][cur]), int(lib["lengths"][cid])
+        err = "  --  " if m.pick_err is None else f"{m.pick_err:6.2f}"
+        title = f"{head}   {speed:.1f} m/s"
+        body = (f"clip [{cid}]: {clip}\n"
+                f"frame: {fic}/{length - 1}  (global {cur})\n"
+                f"contact: {'ON' if m.held else 'off'}"
+                f"   gizmo: {'on' if self.show_traj else 'off'} (T)\n"
+                f"query loss: {err}"
+                + ("" if C.POST_PROCESSING else "   [post-processing OFF]")
+                + "\n"
+                "WASD move | arrows face | Shift walk | B grab | Space reset\n"
+                "drag orbit | right-drag pan | scroll zoom | Esc quit")
+        mujoco.mjr_overlay(mujoco.mjtFont.mjFONT_NORMAL,
+                           mujoco.mjtGridPos.mjGRID_TOPLEFT, viewport,
+                           title, body, self.ctx)

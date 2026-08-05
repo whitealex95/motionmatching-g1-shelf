@@ -65,11 +65,12 @@ class MotionMatcher:
             self.loco_trees.append((int(rs), int(re),
                                     cKDTree(self.Xloco[rs:re - TAIL])))
 
-        # The pick clip: entered at its last idle frame, played to the end.
+        # The pick clip: entered at its first frame, played to the end. The
+        # idle second at the start is the window where the root offset from
+        # walking blends away.
         pick_rows = np.where(self.skill == C.SKILL_PICK)[0]
         lo, hi = self._clip_bounds(int(pick_rows[0]))
-        idle = np.where(self.phase[lo:hi] == C.PHASE_IDLE)[0]
-        self.pick_entry = lo + int(idle[-1])
+        self.pick_entry = lo
         self.pick_lo, self.pick_hi = lo, hi
 
         # The recorded stance: where move-to-pick walks to.
@@ -162,7 +163,7 @@ class MotionMatcher:
         if dist > 1e-6:
             speed = float(np.clip(1.8 * dist, 0.25, 1.2))
             vel[0:2] = to / dist * speed
-        if dist > 0.4:
+        if dist > C.MOVE_FACE_DIST:
             face = vel / (np.linalg.norm(vel) + 1e-9)
         else:
             face = np.array([np.cos(self.stance_yaw),

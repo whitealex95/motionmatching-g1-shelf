@@ -109,6 +109,8 @@ class MotionMatcher:
         self.pick_locked = 0
         self.move_timer = 0.0
         self.on_rail = False
+        self.move_target = self.stance_xy.copy()
+        self.warp_step = np.zeros(2)     # root correction applied this frame
         # The command actually fed to the matcher (shown by the viewer).
         self.cmdVel = np.zeros(3)
         self.cmdFace = np.zeros(3)
@@ -173,6 +175,7 @@ class MotionMatcher:
         elif n > 0.45 or along > 0.1:
             self.on_rail = False
         target = self.stance_xy if self.on_rail else self.stance_xy - 0.6 * rail
+        self.move_target = target
         to = target - self.rootPos[0:2]
         dist = float(np.linalg.norm(to))
         vel = np.zeros(3)
@@ -230,23 +233,25 @@ class MotionMatcher:
             self.rootRot, self.rootAng, desiredRot, C.ROT_HALFLIFE, dt_col)
         self.Tdir = quat.mul_vec(Trot, FORWARD)
 
-    def _blend_goal_taps(self, desiredVel):
-        """Near the stance, bend the future taps onto the straight line to
-        it and stop them there, so the query asks to arrive and stop."""
-        to = self.stance_xy - self.rootPos[0:2]
+    def _blend_goal_taps(self, desiredVel, desiredFace):
+        """Bend the future taps onto the straight line to the current move
+        target, so the query (and the red path) follows the command line.
+        On the rail leg the taps also stop at the stance."""
+        to = self.move_target - self.rootPos[0:2]
         dist = float(np.linalg.norm(to))
         if dist >= C.MOVE_GOAL_DIST or dist < 1e-6:
             return
         w = 1.0 - dist / C.MOVE_GOAL_DIST
         line_dir = to / dist
         speed = float(np.linalg.norm(desiredVel))
-        head = np.array([np.cos(self.stance_yaw), np.sin(self.stance_yaw), 0.0])
         for k, t in enumerate(self.Ttimes):
-            s = min(speed * float(t), dist)
+            s = speed * float(t)
+            if self.on_rail:
+                s = min(s, dist)          # arrive at the stance and stop
             line = self.Tpos[k].copy()
             line[0:2] = self.rootPos[0:2] + line_dir * s
             self.Tpos[k] = (1.0 - w) * self.Tpos[k] + w * line
-            d = (1.0 - w) * self.Tdir[k] + w * head
+            d = (1.0 - w) * self.Tdir[k] + w * desiredFace
             self.Tdir[k] = d / (np.linalg.norm(d) + 1e-9)
 
     def _query(self):
@@ -307,8 +312,8 @@ class MotionMatcher:
         self.cmdVel = desiredVel.copy()
         self.cmdFace = np.asarray(desiredFace, float).copy()
         self._predict_trajectory(desiredVel, desiredFace)
-        if self.state == STATE_MOVE and self.on_rail:
-            self._blend_goal_taps(desiredVel)
+        if self.state == STATE_MOVE:
+            self._blend_goal_taps(desiredVel, np.asarray(desiredFace, float))
 
         if self.searchTimer <= 0.0 and self.pick_locked == 0:
             self._search_loco()
@@ -340,6 +345,7 @@ class MotionMatcher:
         # real motion, so planted feet never slide. The fraction ramps up to
         # a full projection as the robot closes in. The heading is left
         # alone -- the matcher needs to turn freely.
+        self.warp_step = np.zeros(2)
         if self.state == STATE_MOVE:
             step_len = float(np.linalg.norm(self.rootVel[0:2])) * DT
             if step_len > 1e-5:
@@ -351,7 +357,8 @@ class MotionMatcher:
                 gain = C.MOVE_WARP_GAIN + (1.0 - C.MOVE_WARP_GAIN) * max(
                     0.0, 1.0 - dist / C.MOVE_GOAL_DIST)
                 if n > 1e-6:
-                    self.rootPos[0:2] += min(gain * step_len, n) * cross / n
+                    self.warp_step = min(gain * step_len, n) * cross / n
+                    self.rootPos[0:2] += self.warp_step
         self.rootRot = yaw_quat(self.rootYaw)
 
         if riding and self.pick_locked == 0:

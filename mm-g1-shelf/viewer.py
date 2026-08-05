@@ -25,6 +25,8 @@ _MARK_RGBA = np.array([0.2, 0.8, 0.3, 0.5], np.float32)
 _MARK_R = 0.22
 _CMD_VEL_RGBA = np.array([0.2, 0.5, 0.95, 1.0], np.float32)
 _CMD_FACE_RGBA = np.array([0.95, 0.8, 0.15, 1.0], np.float32)
+_RAIL_RGBA = np.array([0.9, 0.9, 0.9, 0.6], np.float32)
+_WARP_RGBA = np.array([0.95, 0.45, 0.1, 1.0], np.float32)
 
 _MOVE_KEYS = {glfw.KEY_W, glfw.KEY_A, glfw.KEY_S, glfw.KEY_D}
 _FACE_KEYS = {glfw.KEY_UP, glfw.KEY_DOWN, glfw.KEY_LEFT, glfw.KEY_RIGHT}
@@ -195,8 +197,17 @@ class InteractiveViewer:
     def _draw_approach(self):
         m = self.matcher
         root = np.array([m.rootPos[0], m.rootPos[1], _TRAJ_Z])
-        target = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
+        target = np.array([m.move_target[0], m.move_target[1], _TRAJ_Z])
         self._add_stick(root, target, _MARK_RGBA)
+        # The rail: where the warp pulls the root, ending at the stance.
+        rail = np.array([np.cos(m.stance_yaw), np.sin(m.stance_yaw), 0.0])
+        stance = np.array([m.stance_xy[0], m.stance_xy[1], _TRAJ_Z])
+        self._add_stick(stance - 1.0 * rail, stance, _RAIL_RGBA)
+        # Orange = the warp actively pulling the root toward the rail,
+        # drawn 20x so it is visible (it is a few mm per frame).
+        w = np.array([m.warp_step[0], m.warp_step[1], 0.0])
+        if np.linalg.norm(w) > 1e-5:
+            self._add_stick(root, root + 20.0 * w, _WARP_RGBA)
         vel = np.array([m.cmdVel[0], m.cmdVel[1], 0.0])
         if np.linalg.norm(vel) > 1e-3:
             tip = root + 0.5 * vel
@@ -270,13 +281,18 @@ class InteractiveViewer:
             if state == "MOVE-TO-PICK":
                 legend.append("blue: walk command")
                 legend.append("yellow: face command")
+                legend.append("white: rail")
+                legend.append("orange: warp pull (x20)")
         if not m.held:
             legend.append("green: pick spot")
         legend = " | ".join(legend) if legend else "gizmo off"
         title = f"{head}   {speed:.1f} m/s"
+        warp = float(np.linalg.norm(m.warp_step)) * C.FPS * 100.0
         body = (f"clip [{cid}]: {clip}\n"
                 f"frame: {fic}/{length - 1}  (global {cur})\n"
-                f"contact: {'ON' if m.held else 'off'}   gizmo (T): {legend}\n"
+                f"contact: {'ON' if m.held else 'off'}"
+                + (f"   warp {warp:4.1f} cm/s" if state == "MOVE-TO-PICK" else "")
+                + f"   gizmo (T): {legend}\n"
                 "WASD move | arrows face | Shift walk | B grab | Space reset\n"
                 "drag orbit | right-drag pan | scroll zoom | Esc quit")
         mujoco.mjr_overlay(mujoco.mjtFont.mjFONT_NORMAL,

@@ -264,11 +264,19 @@ class InteractiveViewer:
         cid = int(lib["clip_id"][cur])
         clip = lib["clip_names"][cid]
         fic, length = int(lib["frame_in_clip"][cur]), int(lib["lengths"][cid])
+        legend = []
+        if self.show_traj:
+            legend.append("red: future path")
+            if state == "MOVE-TO-PICK":
+                legend.append("blue: walk command")
+                legend.append("yellow: face command")
+        if not m.held:
+            legend.append("green: pick spot")
+        legend = " | ".join(legend) if legend else "gizmo off"
         title = f"{head}   {speed:.1f} m/s"
         body = (f"clip [{cid}]: {clip}\n"
                 f"frame: {fic}/{length - 1}  (global {cur})\n"
-                f"contact: {'ON' if m.held else 'off'}"
-                f"   gizmo: {'on' if self.show_traj else 'off'} (T)\n"
+                f"contact: {'ON' if m.held else 'off'}   gizmo (T): {legend}\n"
                 "WASD move | arrows face | Shift walk | B grab | Space reset\n"
                 "drag orbit | right-drag pan | scroll zoom | Esc quit")
         mujoco.mjr_overlay(mujoco.mjtFont.mjFONT_NORMAL,

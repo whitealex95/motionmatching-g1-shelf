@@ -41,20 +41,20 @@
   ],
   "shelf": {
     "vase_pos": [
-      0.46678180224940635,
-      0.13690691284065065,
-      0.5890927613405552
+      0.54698,
+      0.12577,
+      0.753
     ],
-    "grasp_frame": 51,
+    "grasp_frame": 54,
     "palm_offset": [
       0.1,
       -0.007,
       0.0
     ],
-    "shelf_top_z": 0.5890927613405552,
-    "shelf_front_x": 0.33678180224940635,
-    "shelf_center_y": 0.13690691284065065,
-    "shelf_depth": 0.32,
-    "shelf_width": 0.9
+    "shelf_top_z": 0.753,
+    "shelf_front_x": 0.40456,
+    "shelf_center_y": 0.12577,
+    "shelf_depth": 0.285,
+    "shelf_width": 0.798
   }
 }

@@ -1,6 +1,6 @@
-"""Render the pick clip: the G1 grabs the vase from the shelf.
+"""Render the active pick2 clip: the G1 grabs the flask from the shelf.
 
-The robot plays the recorded qpos. The vase stands on the shelf until the
+The robot plays the recorded qpos. The flask stands on the shelf until the
 contact flag turns on; from then on it keeps a fixed pose relative to the
 palm, so it moves with the hand. No physics anywhere.
 
@@ -18,7 +18,10 @@ import mujoco
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
+sys.path.insert(0, os.path.join(ROOT, "mm-g1-shelf"))
 import shelf_model as SM
+import config as C
+from pick2 import retarget_file
 
 DATA_DIR = os.path.join(ROOT, "data", "g1_shelf")
 SCENE_XML = os.path.join(ROOT, "assets", "unitree_g1", "scene.xml")
@@ -51,7 +54,10 @@ def main():
 
     import imageio
 
-    clip = np.load(os.path.join(DATA_DIR, "pick.npz"))
+    if (not os.path.exists(C.PICK_QPOS)
+            or os.path.getmtime(C.PICK_QPOS) < os.path.getmtime(C.PICK_SOURCE)):
+        retarget_file(C.PICK_SOURCE, C.PICK_QPOS)
+    clip = np.load(C.PICK_QPOS)
     with open(os.path.join(DATA_DIR, "meta.json")) as f:
         meta = json.load(f)
     qpos, contact = clip["qpos"], clip["contact"]

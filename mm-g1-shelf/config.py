@@ -5,6 +5,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data", "gmr_lafan1_g1")
 SHELF_DATA_DIR = os.path.join(ROOT, "data", "g1_shelf")
 SHELF_META = os.path.join(SHELF_DATA_DIR, "meta.json")
+PICK_SOURCE = os.path.join(SHELF_DATA_DIR, "pick2.npz")
+PICK_QPOS = os.path.join(SHELF_DATA_DIR, "pick2_g1.npz")
 SCENE_XML = os.path.join(ROOT, "assets", "unitree_g1", "scene.xml")
 TOOLS_DIR = os.path.join(ROOT, "tools")
 LIB_PATH = os.path.join(ROOT, "data", "motion_lib.npz")
@@ -35,7 +37,7 @@ CLIP_TRIM = {
     "pushAndStumble1_subject5":  (198, 353),
 }
 
-LIB_VERSION = 3                # bump when the library build changes
+LIB_VERSION = 4                # bump when the library build changes
 
 CLIPS = ["walk1_subject5", "run1_subject5", "pushAndStumble1_subject5"]
 MIRROR = True

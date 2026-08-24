@@ -1,4 +1,5 @@
 __pycache__/
 *.pyc
 data/motion_lib.npz
+data/g1_shelf/pick2_g1.npz
 datagen-g1-shelf/out/

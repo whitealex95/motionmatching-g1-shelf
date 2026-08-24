@@ -1,11 +1,11 @@
-"""Build / load the motion library: LAFAN locomotion + the pick clip.
+"""Build / load the motion library: LAFAN locomotion + the pick2 clip.
 
 All clips are concatenated into one array, with per-frame heading, foot
 positions and right-palm pose precomputed. Cached to data/motion_lib.npz.
 
-The pick clip (data/g1_shelf/pick.npz, already 30 Hz) is shifted by
-SHELF_ORIGIN so the shelf sits ahead of the robot spawn; its reach..hold
-span is labeled SKILL_PICK.
+``pick2.npz`` is retargeted from its 34-joint Y-up G1 representation to a
+MuJoCo qpos clip, then shifted by SHELF_ORIGIN so the shelf sits ahead of
+the robot spawn.  Its reach..hold span is labeled SKILL_PICK.
 """
 import os
 import json
@@ -14,6 +14,7 @@ import numpy as np
 
 import config as C
 from g1_model import G1Model, csv_to_qpos
+from pick2 import retarget_file
 
 
 def _gmr_rows(name, data_dir):
@@ -29,7 +30,12 @@ def _load_loco_clip(name, data_dir=C.DATA_DIR):
 
 
 def _load_pick_clip():
-    d = np.load(os.path.join(C.SHELF_DATA_DIR, "pick.npz"))
+    if (not os.path.exists(C.PICK_QPOS)
+            or os.path.getmtime(C.PICK_QPOS) < os.path.getmtime(C.PICK_SOURCE)):
+        max_rms = retarget_file(C.PICK_SOURCE, C.PICK_QPOS)
+        print(f"Retargeted pick2 -> {os.path.basename(C.PICK_QPOS)} "
+              f"(max joint-position RMS {max_rms * 1000:.3f} mm)")
+    d = np.load(C.PICK_QPOS)
     qpos = d["qpos"].astype(np.float64)
     qpos[:, 0:2] += np.array(C.SHELF_ORIGIN)
     return qpos, d["phase"].astype(np.int32), d["contact"].astype(np.float64)

@@ -1,9 +1,8 @@
-"""The interactive scene: kinematic G1 + the shelf and the vase.
+"""The interactive scene: kinematic G1 + an IKEA shelf and bottle.
 
-Built through tools/shelf_model.py, the same code that built the scene the
-clip was rendered with. Nothing is simulated: the robot qpos comes from the
-motion matching output, and the vase pose comes from the matcher (on the
-shelf, or stuck to the palm).
+Built through tools/shelf_model.py. Nothing is simulated: the robot qpos
+comes from the motion matching output, and the bottle pose comes from the
+matcher (on the shelf, or stuck to the palm).
 """
 import json
 import sys

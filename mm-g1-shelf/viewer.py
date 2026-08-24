@@ -4,8 +4,8 @@ Controls
   W / A / S / D ........ move (camera-relative)
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... pick up the vase (walks to the shelf by itself)
-  Space ................ reset robot and vase
+  B .................... pick up the bottle (walks to the shelf by itself)
+  Space ................ reset robot and bottle
   T .................... toggle the command trajectory gizmo
   Left-drag orbit | right-drag pan | scroll zoom | Esc quit
 """
@@ -51,6 +51,9 @@ class InteractiveViewer:
 
         self.cam = mujoco.MjvCamera()
         self.opt = mujoco.MjvOption()
+        # MjvOption() starts with every visualization flag disabled.  Load
+        # MuJoCo's defaults so mesh/material textures are rendered.
+        mujoco.mjv_defaultOption(self.opt)
         self.scene = mujoco.MjvScene(self.model, maxgeom=10000)
         self.ctx = mujoco.MjrContext(self.model, mujoco.mjtFontScale.mjFONTSCALE_150)
 
@@ -255,13 +258,13 @@ class InteractiveViewer:
             head = ("RUN" if speed > C.MAX_SPEED * (1 + C.WALK_SCALE) / 2 else
                     ("WALK" if speed > 1e-3 else "IDLE"))
             if m.held:
-                head += "  vase in hand"
+                head += "  bottle in hand"
             else:
-                head += "  [B: pick up the vase]"
+                head += "  [B: pick up the bottle]"
         elif state == "MOVE-TO-PICK":
             head = "WALKING TO THE SHELF  [B: cancel]"
         else:
-            head = "PICKING UP THE VASE"
+            head = "PICKING UP THE BOTTLE"
         lib, cur = m.lib, m.cur
         cid = int(lib["clip_id"][cur])
         clip = lib["clip_names"][cid]

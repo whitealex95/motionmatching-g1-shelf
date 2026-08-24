@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Interactive motion matching for the Unitree G1 with a shelf and a vase.
+"""Interactive motion matching for the Unitree G1 with an IKEA shelf and bottle.
 
     python run.py                # open the viewer
     python run.py --build-only   # build/refresh the motion library cache and exit
 
 Drive the G1 with WASD and press B: the robot walks to the pick spot by
-itself, plays the pick clip, and the vase snaps onto the right hand at the
+itself, plays the pick clip, and the bottle snaps onto the right hand at the
 grab -- then walk away with it.
 
 Controls
   W / A / S / D ........ move, relative to the camera
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
-  B .................... pick up the vase (walks to the shelf by itself)
-  Space ................ reset robot and vase
+  B .................... pick up the bottle (walks to the shelf by itself)
+  Space ................ reset robot and bottle
   T .................... toggle the command trajectory gizmo
   Left-drag / right-drag / scroll ... orbit / pan / zoom
   Esc .................. quit

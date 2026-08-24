@@ -1,6 +1,6 @@
 # mm-g1-shelf
 
-Part 2: interactive motion matching with the shelf pick.
+Part 2: interactive motion matching with the IKEA shelf-and-bottle pick.
 
 ```bash
 python ../run.py           # or: python run.py from the repo root
@@ -26,8 +26,8 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
   horizons), so the query asks for exactly the trajectory we want. B again
   cancels, and each leg gives up after `MOVE_TIMEOUT`.
 - **PICK** plays the clip to the end with no re-matching. The entry offset
-  at the stance crossing is ~1-2 cm; the vase snap absorbs it at the grab —
-  the vase takes the recorded grip pose on the palm at that moment and
+  at the stance crossing is ~1-2 cm; the bottle snap absorbs it at the grab —
+  the bottle takes the recorded grip pose on the palm at that moment and
   follows the hand from then on.
 
 With the trajectory gizmo on (T), MOVE-TO-PICK also shows how its command
@@ -44,9 +44,9 @@ behind the shelf walks through it.
 | `config.py` | paths, qpos layout, motion-matching and pick settings |
 | `data.py` | build/load the motion library (LAFAN loco + the pick clip) |
 | `features.py` | the locomotion feature database (27-D) |
-| `controller.py` | the matcher: loco search, B plays the pick, vase snap |
-| `arm_fk.py` | right-palm forward kinematics (keeps the vase on the hand) |
-| `scene.py` | the scene: robot qpos + vase mocap pose, `mj_forward` only |
+| `controller.py` | the matcher: loco search, B plays the pick, bottle snap |
+| `arm_fk.py` | right-palm forward kinematics (keeps the bottle on the hand) |
+| `scene.py` | the scene: robot qpos + bottle mocap pose, `mj_forward` only |
 | `viewer.py` | GLFW viewer, keyboard control, HUD |
 | `g1_model.py` | FK for features, sagittal mirror |
 | `quat.py`, `springs.py` | math (same as the door/box repos) |

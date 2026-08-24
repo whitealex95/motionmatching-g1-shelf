@@ -1,42 +1,80 @@
-"""The shelf and the vase, shared by every part of this project.
+"""The IKEA BILLY shelf and UNDERSÖKA flask used by the Python demo.
 
-The scene is built in code from the numbers in data/g1_shelf/meta.json,
-which datagen computed from the motion clip: the vase stands where the
-right hand stops, and the shelf is sized around it.
+The recorded motion is authored around the target in
+``data/g1_shelf/meta.json``.  The bottle remains a mocap body: it has no
+joints or physics, and the controller places it on the shelf or keeps it
+stuck to the right hand after the grab.
 
-The vase is a mocap body: it has no joints and no physics. Whoever plays
-the motion also sets the vase pose every frame (on the shelf, or stuck to
-the hand after the grab).
+MuJoCo does not load GLB files directly.  The OBJ/PNG files used here are
+generated from the source GLBs by ``tools/convert_ikea_assets.py``.
 """
+from pathlib import Path
+
 import numpy as np
 import mujoco
 
-BOARD_T = 0.02          # board and panel thickness
-BOARD_GAP = 0.28        # vertical distance between boards
-N_BOARDS = 3
+ROOT = Path(__file__).resolve().parents[1]
+IKEA_DIR = ROOT / "assets" / "ikea" / "mujoco"
+BILLY_MESH = IKEA_DIR / "billy_brown_walnut.obj"
+BILLY_TEXTURE = IKEA_DIR / "billy_brown_walnut_basecolor.png"
+BOTTLE_MESH = IKEA_DIR / "undersoka_flask_black.obj"
+BOTTLE_TEXTURE = IKEA_DIR / "undersoka_flask_black_basecolor.png"
 
+# The converted walnut BILLY shelf is 0.798 x 0.279 x 2.049 m and has a shelf
+# top at approximately 0.753 m.  Align this height to the configured bottle
+# target so the recorded right-hand trajectory reaches it.  The body origin is
+# placed beneath that shelf level, yielding a natural floor contact while
+# using a real BILLY shelf rather than a floating bottle.
+BILLY_BOTTLE_SHELF_Z = 0.753
+
+# The browser exporter continues to write its compact procedural shelf format.
+# Retain these values for that exporter only; the MuJoCo scene below does not
+# create any of the corresponding boxes or cylinders.
+BOARD_T = 0.02
+BOARD_GAP = 0.28
+N_BOARDS = 3
 _WOOD = [0.55, 0.36, 0.20, 1.0]
 _WOOD_DARK = [0.38, 0.25, 0.14, 1.0]
 _VASE = [0.26, 0.42, 0.62, 1.0]
 _VASE_HELD = [0.36, 0.58, 0.82, 1.0]
-
-# Vase shape, relative to its base center: a body, a neck, and a lip.
-# The hand grabs the neck, so the grasp point is GRASP_H above the base.
-VASE_R = 0.05
-GRASP_H = 0.16
-VASE_GEOMS = [   # (name, pos_z, radius, half_height)
+VASE_GEOMS = [
     ("vase_body", 0.06, 0.050, 0.060),
     ("vase_neck", 0.16, 0.022, 0.040),
-    ("vase_lip",  0.215, 0.032, 0.015),
+    ("vase_lip", 0.215, 0.032, 0.015),
 ]
 
 
-def build_model(scene_xml_path, meta, origin_xy=(0.0, 0.0), off_w=1280, off_h=720):
-    """Add the shelf and the vase to the G1 scene and compile it.
+def _require_asset(path):
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Missing MuJoCo asset: {path}\n"
+            "Convert the checked-in IKEA GLBs first:\n"
+            "  python tools/convert_ikea_assets.py")
+    return str(path)
 
-    `meta` is the "shelf" part of data/g1_shelf/meta.json. `origin_xy`
-    moves the whole shelf scene, so the demo can place it away from the
-    robot spawn. Returns (model, ids)."""
+
+def _add_textured_mesh(spec, mesh_name, mesh_path, texture_name, texture_path,
+                       material_name, metallic, roughness):
+    """Register one converted OBJ mesh and its base-color PNG material."""
+    spec.add_mesh(name=mesh_name, file=_require_asset(mesh_path))
+    texture = spec.add_texture(name=texture_name,
+                               file=_require_asset(texture_path))
+    texture.type = mujoco.mjtTexture.mjTEXTURE_2D
+    material = spec.add_material(name=material_name)
+    # The first MjSpec texture slot is the user slot; ``texture=...`` in
+    # MJCF maps to the RGB role at index 1.
+    material.textures = ("", texture_name)
+    material.metallic = metallic
+    material.roughness = roughness
+    return mesh_name, material_name
+
+
+def build_model(scene_xml_path, meta, origin_xy=(0.0, 0.0), off_w=1280, off_h=720):
+    """Add the IKEA shelf and bottle to the G1 scene and compile it.
+
+    ``meta`` supplies the bottle target from the recorded pick motion;
+    ``origin_xy`` shifts that recorded scene away from the robot spawn.
+    Returns ``(model, ids)``."""
     spec = mujoco.MjSpec.from_file(scene_xml_path)
     ox, oy = float(origin_xy[0]), float(origin_xy[1])
 
@@ -44,34 +82,34 @@ def build_model(scene_xml_path, meta, origin_xy=(0.0, 0.0), off_w=1280, off_h=72
     wrist.add_site(name="right_palm", pos=[0.10, -0.007, 0.0], size=[0.012] * 3,
                    rgba=[0.1, 0.9, 0.1, 0.35])
 
+    billy_mesh, billy_material = _add_textured_mesh(
+        spec, "billy_mesh", BILLY_MESH, "billy_basecolor", BILLY_TEXTURE,
+        "billy_material", metallic=0.0, roughness=0.72)
+    bottle_mesh, bottle_material = _add_textured_mesh(
+        spec, "bottle_mesh", BOTTLE_MESH, "bottle_basecolor", BOTTLE_TEXTURE,
+        "bottle_material", metallic=0.85, roughness=0.32)
+
+    # The converted meshes use X=width, Y=depth, Z=up.  A -90 degree yaw puts
+    # the BILLY width across the old shelf's Y axis and turns its open front
+    # toward the robot at the world origin.
+    vx, vy, vz = np.asarray(meta["vase_pos"], dtype=float)
+    vx += ox
+    vy += oy
     w = spec.worldbody
-    top = float(meta["shelf_top_z"])
-    front = float(meta["shelf_front_x"]) + ox
-    cy = float(meta["shelf_center_y"]) + oy
-    depth = float(meta["shelf_depth"])
-    width = float(meta["shelf_width"])
-    cx = front + depth / 2.0
+    billy = w.add_body(name="billy_bookcase",
+                       pos=[vx, vy, vz - BILLY_BOTTLE_SHELF_Z],
+                       quat=[np.sqrt(0.5), 0.0, 0.0, -np.sqrt(0.5)])
+    billy.add_geom(name="billy_bookcase_visual",
+                   type=mujoco.mjtGeom.mjGEOM_MESH, meshname=billy_mesh,
+                   material=billy_material, rgba=[1.0, 1.0, 1.0, 1.0],
+                   contype=0, conaffinity=0)
 
-    shelf = w.add_body(name="shelf", pos=[cx, cy, 0.0])
-    for k in range(N_BOARDS):
-        z = top - k * BOARD_GAP
-        shelf.add_geom(name=f"board_{k}", type=mujoco.mjtGeom.mjGEOM_BOX,
-                       pos=[0.0, 0.0, z - BOARD_T / 2],
-                       size=[depth / 2, width / 2, BOARD_T / 2], rgba=_WOOD)
-    for sgn, tag in ((1.0, "l"), (-1.0, "r")):
-        shelf.add_geom(name=f"side_{tag}", type=mujoco.mjtGeom.mjGEOM_BOX,
-                       pos=[0.0, sgn * (width / 2 - BOARD_T / 2), top / 2],
-                       size=[depth / 2, BOARD_T / 2, top / 2], rgba=_WOOD_DARK)
-    shelf.add_geom(name="back", type=mujoco.mjtGeom.mjGEOM_BOX,
-                   pos=[depth / 2 - BOARD_T / 2, 0.0, top / 2],
-                   size=[BOARD_T / 2, width / 2, top / 2], rgba=_WOOD_DARK)
-
-    vx, vy, vz = meta["vase_pos"]
-    vase = w.add_body(name="vase", mocap=True, pos=[vx + ox, vy + oy, vz])
-    for name, z, r, hh in VASE_GEOMS:
-        vase.add_geom(name=name, type=mujoco.mjtGeom.mjGEOM_CYLINDER,
-                      pos=[0.0, 0.0, z], size=[r, hh, 0.0], rgba=_VASE,
-                      contype=0, conaffinity=0)
+    # Keep the historical body/ID names: controller and viewer code use them
+    # for the kinematic object pose, independent of the visual mesh.
+    vase = w.add_body(name="vase", mocap=True, pos=[vx, vy, vz])
+    vase.add_geom(name="bottle_visual", type=mujoco.mjtGeom.mjGEOM_MESH,
+                  meshname=bottle_mesh, material=bottle_material,
+                  rgba=[1.0, 1.0, 1.0, 1.0], contype=0, conaffinity=0)
 
     model = spec.compile()
     model.vis.global_.offwidth = max(model.vis.global_.offwidth, off_w)
@@ -79,14 +117,13 @@ def build_model(scene_xml_path, meta, origin_xy=(0.0, 0.0), off_w=1280, off_h=72
 
     ids = dict(
         vase_mocap=model.body("vase").mocapid[0],
-        vase_geoms=[model.geom(n).id for n, _, _, _ in VASE_GEOMS],
+        vase_geoms=[model.geom("bottle_visual").id],
         palm_site=model.site("right_palm").id,
     )
     return model, ids
 
 
 def set_vase_color(model, ids, held):
-    """Tint the vase when it is held, as a visible contact label."""
-    rgba = _VASE_HELD if held else _VASE
+    """Keep the textured bottle's actual material in both interaction states."""
     for gid in ids["vase_geoms"]:
-        model.geom_rgba[gid] = rgba
+        model.geom_rgba[gid] = [1.0, 1.0, 1.0, 1.0]

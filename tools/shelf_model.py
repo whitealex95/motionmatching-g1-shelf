@@ -14,11 +14,15 @@ import numpy as np
 import mujoco
 
 ROOT = Path(__file__).resolve().parents[1]
-IKEA_DIR = ROOT / "assets" / "ikea" / "mujoco"
-BILLY_MESH = IKEA_DIR / "billy_brown_walnut.obj"
-BILLY_TEXTURE = IKEA_DIR / "billy_brown_walnut_basecolor.png"
-BOTTLE_MESH = IKEA_DIR / "undersoka_flask_black.obj"
-BOTTLE_TEXTURE = IKEA_DIR / "undersoka_flask_black_basecolor.png"
+IKEA_DIR = ROOT / "assets" / "ikea"
+# Source GLBs (the web demo loads these directly with three.js).
+BILLY_GLB = IKEA_DIR / "BILLY bookcase - brown walnut effect.glb"
+BOTTLE_GLB = IKEA_DIR / "UNDERSÖKA insulated steel flask - black.glb"
+# MuJoCo conversions (see tools/convert_ikea_assets.py).
+BILLY_MESH = IKEA_DIR / "mujoco" / "billy_brown_walnut.obj"
+BILLY_TEXTURE = IKEA_DIR / "mujoco" / "billy_brown_walnut_basecolor.png"
+BOTTLE_MESH = IKEA_DIR / "mujoco" / "undersoka_flask_black.obj"
+BOTTLE_TEXTURE = IKEA_DIR / "mujoco" / "undersoka_flask_black_basecolor.png"
 
 # The converted walnut BILLY shelf is 0.798 x 0.279 x 2.049 m and has a shelf
 # top at approximately 0.753 m.  Align this height to the configured bottle
@@ -26,22 +30,6 @@ BOTTLE_TEXTURE = IKEA_DIR / "undersoka_flask_black_basecolor.png"
 # placed beneath that shelf level, yielding a natural floor contact while
 # using a real BILLY shelf rather than a floating bottle.
 BILLY_BOTTLE_SHELF_Z = 0.753
-
-# The browser exporter continues to write its compact procedural shelf format.
-# Retain these values for that exporter only; the MuJoCo scene below does not
-# create any of the corresponding boxes or cylinders.
-BOARD_T = 0.02
-BOARD_GAP = 0.28
-N_BOARDS = 3
-_WOOD = [0.55, 0.36, 0.20, 1.0]
-_WOOD_DARK = [0.38, 0.25, 0.14, 1.0]
-_VASE = [0.26, 0.42, 0.62, 1.0]
-_VASE_HELD = [0.36, 0.58, 0.82, 1.0]
-VASE_GEOMS = [
-    ("vase_body", 0.06, 0.050, 0.060),
-    ("vase_neck", 0.16, 0.022, 0.040),
-    ("vase_lip", 0.215, 0.032, 0.015),
-]
 
 
 def _require_asset(path):

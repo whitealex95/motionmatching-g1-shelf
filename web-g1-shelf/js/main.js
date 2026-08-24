@@ -1,11 +1,14 @@
 // Interactive G1 shelf-pick demo (Three.js). Loads the exported database,
 // runs the JS motion matcher (mm.js, a port of the Python controller) at a
 // fixed 30 Hz, forward-kinematics the result, and draws the G1 with its full
-// visual meshes. The shelf is static; the vase is placed kinematically every
-// frame (on the shelf, or stuck to the right palm after the grab).
+// visual meshes. The IKEA BILLY shelf is static; the bottle is placed
+// kinematically every frame (on the shelf, or stuck to the palm after the
+// grab).
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MotionMatcher, loadDB } from './mm.js';
 import { fk } from './fk.js';
 
@@ -18,20 +21,41 @@ const setHud = (t) => { hud.textContent = t; };
 async function loadJSON(u) { return (await fetch(u)).json(); }
 async function loadBin(u) { return (await fetch(u)).arrayBuffer(); }
 
+// Same normalization tools/convert_ikea_assets.py bakes into the MuJoCo
+// OBJs: glTF Y-up -> Z-up, centered in X/Y, base at Z=0. The returned group
+// can then take the same world pose as the MuJoCo body.
+function toZUpBaseFrame(gltfScene) {
+  gltfScene.rotation.x = Math.PI / 2;
+  const holder = new THREE.Group();
+  holder.add(gltfScene);
+  holder.updateWorldMatrix(true, true);
+  const bb = new THREE.Box3().setFromObject(gltfScene, true);
+  gltfScene.position.set(-(bb.min.x + bb.max.x) / 2,
+                         -(bb.min.y + bb.max.y) / 2, -bb.min.z);
+  gltfScene.traverse((o) => {
+    if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+  });
+  return holder;
+}
+
 async function boot() {
   setHud('loading G1 model + motion database (~25 MB)...');
-  const [model, meta, bin, meshMeta, meshBin, shelfJson] = await Promise.all([
-    loadJSON(`${DATA}/model.json`), loadJSON(`${DATA}/mm.json`), loadBin(`${DATA}/mm.bin`),
-    loadJSON(`${DATA}/mesh.json`), loadBin(`${DATA}/mesh.bin`),
-    loadJSON(`${DATA}/shelf.json`),
-  ]);
+  const gltf = new GLTFLoader().setDRACOLoader(
+    new DRACOLoader().setDecoderPath('./vendor/draco/'));
+  const [model, meta, bin, meshMeta, meshBin, shelfJson, billyGltf, bottleGltf] =
+    await Promise.all([
+      loadJSON(`${DATA}/model.json`), loadJSON(`${DATA}/mm.json`), loadBin(`${DATA}/mm.bin`),
+      loadJSON(`${DATA}/mesh.json`), loadBin(`${DATA}/mesh.bin`),
+      loadJSON(`${DATA}/shelf.json`),
+      gltf.loadAsync(`${DATA}/billy.glb`), gltf.loadAsync(`${DATA}/bottle.glb`),
+    ]);
   const A = loadDB(meta, bin);
   const mm = new MotionMatcher(meta, A, model.bodies);
   window.mm = mm;                          // console access for debugging
-  start(model.bodies, mm, meshMeta, meshBin, shelfJson);
+  start(model.bodies, mm, meshMeta, meshBin, shelfJson, billyGltf, bottleGltf);
 }
 
-function start(bodies, mm, meshMeta, meshBuf, shelfJson) {
+function start(bodies, mm, meshMeta, meshBuf, shelfJson, billyGltf, bottleGltf) {
   // ---- renderer / scene / camera (z-up) ----
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -95,40 +119,16 @@ function start(bodies, mm, meshMeta, meshBuf, shelfJson) {
   const _yAxis = new THREE.Vector3(0, 1, 0);
   const _Y2Z = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
 
-  // ---- the shelf (static boxes) ----
-  for (const b of shelfJson.boxes) {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(2 * b.size[0], 2 * b.size[1], 2 * b.size[2]),
-      new THREE.MeshStandardMaterial({
-        color: new THREE.Color(b.rgba[0], b.rgba[1], b.rgba[2]),
-        metalness: 0.05, roughness: 0.85 }));
-    mesh.position.set(b.pos[0], b.pos[1], b.pos[2]);
-    mesh.castShadow = true; mesh.receiveShadow = true;
-    scene.add(mesh);
-  }
+  // ---- the IKEA BILLY shelf (static) ----
+  const billy = toZUpBaseFrame(billyGltf.scene);
+  const bq = shelfJson.billy.quat;                       // wxyz
+  billy.position.set(...shelfJson.billy.pos);
+  billy.quaternion.set(bq[1], bq[2], bq[3], bq[0]);
+  scene.add(billy);
 
-  // ---- the vase: one group, placed kinematically each frame ----
-  const vase = new THREE.Group();
-  const vaseMats = [];
-  for (const c of shelfJson.vase.cylinders) {
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(...shelfJson.vase.rgba.slice(0, 3)),
-      metalness: 0.1, roughness: 0.6 });
-    vaseMats.push(mat);
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(c.r, c.r, 2 * c.hh, 24), mat);
-    mesh.position.set(0, 0, c.z);
-    mesh.quaternion.copy(_Y2Z);
-    mesh.castShadow = true;
-    vase.add(mesh);
-  }
+  // ---- the bottle: one group, placed kinematically each frame ----
+  const vase = toZUpBaseFrame(bottleGltf.scene);
   scene.add(vase);
-  let vaseTinted = false;
-  function tintVase(held) {
-    if (held === vaseTinted) return;
-    vaseTinted = held;
-    const c = held ? shelfJson.vase.rgba_held : shelfJson.vase.rgba;
-    for (const m of vaseMats) m.color.setRGB(c[0], c[1], c[2]);
-  }
 
   // ---- the pick-spot marker: a green disc + heading tick on the floor ----
   const marker = new THREE.Group();
@@ -282,7 +282,6 @@ function start(bodies, mm, meshMeta, meshBuf, shelfJson) {
     _v1.set(curV[1][1], curV[1][2], curV[1][3], curV[1][0]);
     _vi.slerpQuaternions(_v0, _v1, f);
     vase.quaternion.copy(_vi);
-    tintVase(mm.held);
     marker.visible = !mm.held;
     drawGizmo();
 
@@ -296,9 +295,9 @@ function start(bodies, mm, meshMeta, meshBuf, shelfJson) {
     let head;
     if (state === 'LOCOMOTION') {
       head = lastSpeed > mm.MAX_SPEED * (1 + mm.WALK_SCALE) / 2 ? 'RUN' : (lastSpeed > 1e-3 ? 'WALK' : 'IDLE');
-      head += mm.held ? '  vase in hand' : '  [B: pick up the vase]';
+      head += mm.held ? '  bottle in hand' : '  [B: pick up the bottle]';
     } else if (state === 'MOVE-TO-PICK') head = 'WALKING TO THE SHELF  [B: cancel]';
-    else head = 'PICKING UP THE VASE';
+    else head = 'PICKING UP THE BOTTLE';
     const cid = mm._clipOf(mm.cur);
     const fic = mm.cur - mm.starts[cid];
     setHud(`${head}  ${lastSpeed.toFixed(1)} m/s\nclip [${cid}]: ${mm.clipNames[cid]}\nframe ${fic} (global ${mm.cur})\n` +

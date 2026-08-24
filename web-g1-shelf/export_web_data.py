@@ -2,7 +2,7 @@
 
   model.json   kinematic tree (per body: parent, local pos/quat, hinge axis)
   mesh.json/.bin  the G1 visual meshes, vertices pre-moved into body frames
-  shelf.json   shelf boxes + vase cylinders + floor marker, world positions
+  shelf.json   world placement of the IKEA GLBs (also copied into data/)
   mm.json/.bin the motion database + every constant the JS matcher needs
 
 Run from the repo root with the mujoco env:
@@ -11,6 +11,7 @@ Run from the repo root with the mujoco env:
 """
 import json
 import os
+import shutil
 import sys
 
 import numpy as np
@@ -112,38 +113,27 @@ def export_meshes(m):
 
 
 def export_shelf():
-    """Shelf boxes, vase cylinders, and the floor marker, all in world."""
+    """Copy the IKEA GLBs and write their world placement (same math as
+    tools/shelf_model.py: the BILLY body origin sits below the bottle target
+    by the shelf-board height, yawed -90 deg to face the robot spawn)."""
     with open(C.SHELF_META) as f:
         meta = json.load(f)["shelf"]
     ox, oy = C.SHELF_ORIGIN
-    top = meta["shelf_top_z"]
-    front = meta["shelf_front_x"] + ox
-    cy = meta["shelf_center_y"] + oy
-    depth, width = meta["shelf_depth"], meta["shelf_width"]
-    cx = front + depth / 2.0
-
-    boxes = []
-    for k in range(SM.N_BOARDS):
-        z = top - k * SM.BOARD_GAP
-        boxes.append(dict(pos=[cx, cy, z - SM.BOARD_T / 2],
-                          size=[depth / 2, width / 2, SM.BOARD_T / 2],
-                          rgba=SM._WOOD))
-    for sgn in (1.0, -1.0):
-        boxes.append(dict(pos=[cx, cy + sgn * (width / 2 - SM.BOARD_T / 2), top / 2],
-                          size=[depth / 2, SM.BOARD_T / 2, top / 2],
-                          rgba=SM._WOOD_DARK))
-    boxes.append(dict(pos=[cx + depth / 2 - SM.BOARD_T / 2, cy, top / 2],
-                      size=[SM.BOARD_T / 2, width / 2, top / 2],
-                      rgba=SM._WOOD_DARK))
-
     vx, vy, vz = meta["vase_pos"]
-    vase = dict(rest=[vx + ox, vy + oy, vz],
-                rgba=SM._VASE, rgba_held=SM._VASE_HELD,
-                cylinders=[dict(z=z, r=r, hh=hh)
-                           for _, z, r, hh in SM.VASE_GEOMS])
+    vx += ox
+    vy += oy
+
+    shutil.copyfile(SM.BILLY_GLB, os.path.join(OUT, "billy.glb"))
+    shutil.copyfile(SM.BOTTLE_GLB, os.path.join(OUT, "bottle.glb"))
+
+    s = float(np.sqrt(0.5))
+    billy = dict(glb="billy.glb",
+                 pos=[vx, vy, vz - SM.BILLY_BOTTLE_SHELF_Z],
+                 quat=[s, 0.0, 0.0, -s])
+    vase = dict(glb="bottle.glb", rest=[vx, vy, vz])
     with open(os.path.join(OUT, "shelf.json"), "w") as f:
-        json.dump(dict(boxes=boxes, vase=vase), f)
-    print(f"shelf: {len(boxes)} boxes, vase at {vase['rest']}")
+        json.dump(dict(billy=billy, vase=vase), f)
+    print(f"shelf: billy at {billy['pos']}, bottle at {vase['rest']}")
 
 
 def export_mm(lib):

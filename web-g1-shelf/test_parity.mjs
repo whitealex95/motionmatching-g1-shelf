@@ -16,12 +16,14 @@ const bin = binBuf.buffer.slice(binBuf.byteOffset, binBuf.byteOffset + binBuf.by
 const A = loadDB(meta, bin);
 const mm = new MotionMatcher(meta, A, model.bodies);
 
-const N_TICKS = 400;
+const N_TICKS = 650;
 const TRIGGER_TICK = 30;
+const PLACE_TICK = 250;
 
 const rows = [];
 for (let tick = 0; tick < N_TICKS; tick++) {
   if (tick === TRIGGER_TICK) mm.triggerPick();
+  if (tick === PLACE_TICK) mm.triggerPlace();
   const vel = mm.held ? [-0.9, 0, 0] : [0, 0, 0];
   const face = mm.held ? [-1, 0, 0] : [0, 0, 0];
   const q = mm.step(vel, face);

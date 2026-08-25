@@ -167,6 +167,7 @@ function start(bodies, mm, meshMeta, meshBuf, shelfJson, billyGltf, bottleGltf) 
     const k = e.code;
     if (k === 'Space') { mm.reset(); e.preventDefault(); }
     else if (k === 'KeyB') mm.triggerPick();
+    else if (k === 'KeyN') mm.triggerPlace();
     else if (k === 'KeyT') gizmo.visible = !gizmo.visible;
     else held.add(k);
     if (k.startsWith('Arrow')) e.preventDefault();
@@ -295,9 +296,9 @@ function start(bodies, mm, meshMeta, meshBuf, shelfJson, billyGltf, bottleGltf) 
     let head;
     if (state === 'LOCOMOTION') {
       head = lastSpeed > mm.MAX_SPEED * (1 + mm.WALK_SCALE) / 2 ? 'RUN' : (lastSpeed > 1e-3 ? 'WALK' : 'IDLE');
-      head += mm.held ? '  bottle in hand' : '  [B: pick up the bottle]';
-    } else if (state === 'MOVE-TO-PICK') head = 'WALKING TO THE SHELF  [B: cancel]';
-    else head = 'PICKING UP THE BOTTLE';
+      head += mm.held ? '  bottle in hand  [N: put it back]' : '  [B: pick up the bottle]';
+    } else if (state === 'MOVE-TO-PICK') head = `WALKING TO THE SHELF  [${mm.placing ? 'N' : 'B'}: cancel]`;
+    else head = mm.placing ? 'PLACING THE BOTTLE' : 'PICKING UP THE BOTTLE';
     const cid = mm._clipOf(mm.cur);
     const fic = mm.cur - mm.starts[cid];
     setHud(`${head}  ${lastSpeed.toFixed(1)} m/s\nclip [${cid}]: ${mm.clipNames[cid]}\nframe ${fic} (global ${mm.cur})\n` +

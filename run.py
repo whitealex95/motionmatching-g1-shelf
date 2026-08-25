@@ -13,6 +13,7 @@ Controls
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
   B .................... pick up the bottle (walks to the shelf by itself)
+  N .................... put the bottle back (only while holding it)
   Space ................ reset robot and bottle
   T .................... toggle the command trajectory gizmo
   Left-drag / right-drag / scroll ... orbit / pan / zoom

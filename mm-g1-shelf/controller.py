@@ -1,4 +1,5 @@
-"""Real-time motion matching for walking, plus the pick skill on B.
+"""Real-time motion matching for walking, plus the pick skill on B and
+the place skill on N.
 
 The locomotion core is the same as motionmatching-g1-door: a smoothed
 "simulation root" the matcher tracks + integrates, per-clip KD-tree search,
@@ -15,6 +16,13 @@ slows into the dead zone; PICK starts at the stance crossing and plays the
 clip to the end with no re-matching. The bottle welds onto the right palm
 as soon as the live grip pose touches it (WELD_RADIUS, with the clip's
 contact frame as fallback) and follows the hand from then on.
+
+The place (N, only while holding) is the same state machine and the same
+clip: the robot walks the same route, reaches in with the bottle, and the
+weld is undone at the mirror moment -- once the clip's carry phase has
+begun and the grip pose comes back over the rest spot (within WELD_RADIUS,
+or at its closest return), the bottle lets go and settles there while the
+empty hand plays the rest of the clip.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -114,6 +122,8 @@ class MotionMatcher:
         self.searchTimer = 0.0
         self.pick_pending = False
         self.pick_locked = 0
+        self.placing = False
+        self.place_d = np.inf
         self.move_timer = 0.0
         self.on_rail = False
         self.route_pts = [self.rootPos[0:2].copy(), self.stance_xy.copy()]
@@ -147,12 +157,25 @@ class MotionMatcher:
     def trigger_pick(self):
         """B: walk to the pick stance and play the clip. Pressing B again
         while walking there cancels."""
-        if self.state == STATE_MOVE:
+        if self.state == STATE_MOVE and not self.placing:
             self.state = C.SKILL_LOCO
             return
         if self.pick_locked > 0 or self.state != C.SKILL_LOCO or self.held:
             return
         self.pick_pending = True
+
+    def trigger_place(self):
+        """N: with the bottle in hand, walk back to the stance and play the
+        same clip to put it back. Pressing N again while walking cancels."""
+        if self.state == STATE_MOVE and self.placing:
+            self.state = C.SKILL_LOCO
+            self.placing = False
+            return
+        if self.pick_locked > 0 or self.state != C.SKILL_LOCO or not self.held:
+            return
+        self.pick_pending = True
+        self.placing = True
+        self.place_d = np.inf
 
     # --- inertialized cut ---------------------------------------------------
     def _inertialize_into(self, b, lo, hi):
@@ -262,8 +285,9 @@ class MotionMatcher:
         self.searchTimer = C.SEARCH_TIME
 
     def _end_skill(self):
-        """Pick finished: search locomotion and blend back."""
+        """Pick or place finished: search locomotion and blend back."""
         self.pick_locked = 0
+        self.placing = False
         f, lo, hi = self._search_trees(self.loco_trees, self._query(),
                                        self.Xloco, False)
         self._inertialize_into(f, lo, hi)
@@ -371,6 +395,7 @@ class MotionMatcher:
                 desiredFace = np.zeros(3)
             elif self.move_timer > C.MOVE_TIMEOUT:
                 self.state = C.SKILL_LOCO
+                self.placing = False
 
         desiredVel = np.asarray(desiredVel, float)
         self.cmdVel = desiredVel.copy()
@@ -440,11 +465,13 @@ class MotionMatcher:
         qpos[3:7] = pelvWorldRot
         qpos[7:] = dofOut
 
-        # The vase: weld onto the palm when the live grip pose touches the
-        # resting bottle (recorded contact frame as fallback). The offset
-        # left at that moment is inertialized away, so the bottle is carried
-        # off from where it stood instead of jumping to the hand.
-        if self.state == C.SKILL_PICK and not self.held:
+        # The vase. Pick: weld onto the palm when the live grip pose touches
+        # the resting bottle (recorded contact frame as fallback). Place: the
+        # mirror image -- once the clip's carry phase has begun, un-weld when
+        # the grip pose comes back over the rest spot (within WELD_RADIUS, or
+        # at its closest return). The pose offset left at either moment is
+        # inertialized away, so the bottle never jumps.
+        if self.state == C.SKILL_PICK and not self.placing and not self.held:
             palm_p, palm_q = self.armfk.palm_pose(qpos)
             grip = palm_p + quat.mul_vec(palm_q, self.snap_pos)
             if (np.linalg.norm(grip - self.vase_pos) < C.WELD_RADIUS
@@ -453,6 +480,16 @@ class MotionMatcher:
                 self.offVase = self.vase_pos - grip
                 self.offVaseRot = quat.mul(
                     self.vase_quat, quat.inv(quat.mul(palm_q, self.snap_quat)))
+        elif self.state == C.SKILL_PICK and self.placing and self.held:
+            palm_p, palm_q = self.armfk.palm_pose(qpos)
+            grip = palm_p + quat.mul_vec(palm_q, self.snap_pos)
+            d = float(np.linalg.norm(grip - self.vase_rest))
+            if self.contact[f] > 0.5:
+                if d < C.WELD_RADIUS or d > self.place_d:
+                    self.held = False
+                    self.offVase = self.vase_pos - self.vase_rest
+                    self.offVaseRot = self.vase_quat.copy()
+                self.place_d = d
         if self.held:
             palm_p, palm_q = self.armfk.palm_pose(qpos)
             self.offVase, self.offVaseVel = DecaySpringDamperPosition(
@@ -463,4 +500,11 @@ class MotionMatcher:
                              + self.offVase)
             self.vase_quat = quat.mul(self.offVaseRot,
                                       quat.mul(palm_q, self.snap_quat))
+        else:
+            self.offVase, self.offVaseVel = DecaySpringDamperPosition(
+                self.offVase, self.offVaseVel, C.WELD_HALFLIFE, DT)
+            self.offVaseRot, self.offVaseAng = DecaySpringDamperRotation(
+                self.offVaseRot, self.offVaseAng, C.WELD_HALFLIFE, DT)
+            self.vase_pos = self.vase_rest + self.offVase
+            self.vase_quat = self.offVaseRot.copy()
         return qpos

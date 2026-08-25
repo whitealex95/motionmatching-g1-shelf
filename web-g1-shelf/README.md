@@ -27,7 +27,8 @@ cd web-g1-shelf && python -m http.server 8000
 ```
 
 Controls: WASD move, arrows face, Shift walk, **B** pick up the bottle
-(walks to the shelf by itself; B again cancels), Space reset, T gizmo.
+(walks to the shelf by itself; B again cancels), **N** put it back (only
+while holding; same route, same clip), Space reset, T gizmo.
 
 | file | role |
 |---|---|

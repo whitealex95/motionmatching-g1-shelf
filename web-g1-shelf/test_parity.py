@@ -1,6 +1,7 @@
 """Python <-> JS parity test: both matchers run the same scripted player
-(press B at tick 30, carry the vase away once held) and every tick's qpos,
-vase pose, held flag and matched frame are compared.
+(press B at tick 30, carry the bottle away once held, press N at tick 250
+to put it back) and every tick's qpos, vase pose, held flag and matched
+frame are compared.
 
     python web-g1-shelf/test_parity.py     (needs node on PATH)
 """
@@ -20,8 +21,9 @@ C.APPROX_BIAS = 0.0            # exact NN, like the JS brute force
 from data import load_library
 from controller import MotionMatcher
 
-N_TICKS = 400
+N_TICKS = 650
 TRIGGER_TICK = 30
+PLACE_TICK = 250
 
 
 def commands(tick, held):
@@ -36,6 +38,8 @@ def run_python():
     for tick in range(N_TICKS):
         if tick == TRIGGER_TICK:
             m.trigger_pick()
+        if tick == PLACE_TICK:
+            m.trigger_place()
         vel, face = commands(tick, m.held)
         q = m.step(np.array(vel), np.array(face))
         rows.append(list(q) + list(m.vase_pos)

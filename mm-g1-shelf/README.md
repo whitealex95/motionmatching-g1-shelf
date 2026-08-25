@@ -30,6 +30,12 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
   with the clip's contact frame as fallback). The ~1-2 cm entry offset left
   at that moment is inertialized away (`WELD_HALFLIFE`), so the bottle is
   carried off from where it stood instead of jumping to the hand.
+- **PLACE** (N, only while holding) is the same state machine and the same
+  clip: the robot walks the same route with the bottle and reaches in. The
+  weld is undone at the mirror moment — once the clip's carry phase has
+  begun and the grip pose comes back over the rest spot (within
+  `WELD_RADIUS`, or at its closest return) the bottle lets go, settles on
+  the shelf, and the empty hand plays out the rest of the clip.
 
 With the trajectory gizmo on (T), MOVE-TO-PICK also shows how its command
 is made: a green line to the stance, a blue arrow for the commanded

@@ -9,7 +9,10 @@
 // on the final leg the root is pinned to the rail. PICK plays the clip with
 // no re-matching; the bottle welds onto the right palm as soon as the live
 // grip pose touches it (contact frame as fallback), the leftover offset is
-// inertialized away, and it follows the hand from then on.
+// inertialized away, and it follows the hand from then on. The place skill
+// (N, only while holding) runs the same route and the same clip, and undoes
+// the weld once the carry phase has begun and the grip pose comes back over
+// the rest spot -- the bottle settles there while the empty hand plays out.
 
 import { quat, v3 } from './quat.js';
 import { fk } from './fk.js';
@@ -143,6 +146,7 @@ export class MotionMatcher {
     this.offPR = IDENTITY.slice(); this.offPAng = [0, 0, 0];
     this.searchTimer = 0;
     this.pickPending = false; this.pickLocked = 0;
+    this.placing = false; this.placeD = Infinity;
     this.moveTimer = 0;
     this.onRail = false;
     this.routePts = [[0, 0], this.stanceXY.slice()];
@@ -163,9 +167,21 @@ export class MotionMatcher {
   // B: walk to the pick stance and play the clip. B again while walking
   // there cancels.
   triggerPick() {
-    if (this.state === STATE_MOVE) { this.state = this.LOCO; return; }
+    if (this.state === STATE_MOVE && !this.placing) { this.state = this.LOCO; return; }
     if (this.pickLocked > 0 || this.state !== this.LOCO || this.held) return;
     this.pickPending = true;
+  }
+
+  triggerPlace() {
+    if (this.state === STATE_MOVE && this.placing) {
+      this.state = this.LOCO;
+      this.placing = false;
+      return;
+    }
+    if (this.pickLocked > 0 || this.state !== this.LOCO || !this.held) return;
+    this.pickPending = true;
+    this.placing = true;
+    this.placeD = Infinity;
   }
   get cur() { return this.animFrame; }
   get riding() { return this.pickLocked > 0; }
@@ -282,6 +298,7 @@ export class MotionMatcher {
 
   _endSkill() {
     this.pickLocked = 0;
+    this.placing = false;
     const [f, lo, hi] = this._search(this.locoSegs, this._query(), this.Xloco, 27, false);
     this._inertInto(f, lo, hi);
     this.state = this.LOCO;
@@ -406,6 +423,7 @@ export class MotionMatcher {
         desiredFace = [0, 0, 0];
       } else if (this.moveTimer > this.MOVE_TIMEOUT) {
         this.state = this.LOCO;
+        this.placing = false;
       }
     }
 
@@ -472,11 +490,13 @@ export class MotionMatcher {
     qpos[3] = pelvRot[0]; qpos[4] = pelvRot[1]; qpos[5] = pelvRot[2]; qpos[6] = pelvRot[3];
     for (let i = 0; i < 29; i++) qpos[7 + i] = dofOut[i];
 
-    // The vase: weld onto the palm when the live grip pose touches the
-    // resting bottle (recorded contact frame as fallback). The offset left
-    // at that moment is inertialized away, so the bottle is carried off
-    // from where it stood instead of jumping to the hand.
-    if (this.state === this.PICK && !this.held) {
+    // The vase. Pick: weld onto the palm when the live grip pose touches
+    // the resting bottle (recorded contact frame as fallback). Place: the
+    // mirror image -- once the clip's carry phase has begun, un-weld when
+    // the grip pose comes back over the rest spot (within WELD_RADIUS, or
+    // at its closest return). The pose offset left at either moment is
+    // inertialized away, so the bottle never jumps.
+    if (this.state === this.PICK && !this.placing && !this.held) {
       const [palmP, palmQ] = this._palmPose(qpos);
       const grip = v3.add(palmP, quat.mulVec(palmQ, this.snapPos));
       const d = Math.hypot(grip[0] - this.vasePos[0], grip[1] - this.vasePos[1],
@@ -487,6 +507,19 @@ export class MotionMatcher {
         this.offVaseRot = quat.mul(
           this.vaseQuat, quat.inv(quat.mul(palmQ, this.snapQuat)));
       }
+    } else if (this.state === this.PICK && this.placing && this.held) {
+      const [palmP, palmQ] = this._palmPose(qpos);
+      const grip = v3.add(palmP, quat.mulVec(palmQ, this.snapPos));
+      const d = Math.hypot(grip[0] - this.vaseRest[0], grip[1] - this.vaseRest[1],
+                           grip[2] - this.vaseRest[2]);
+      if (this.contact(f) > 0.5) {
+        if (d < this.WELD_RADIUS || d > this.placeD) {
+          this.held = false;
+          this.offVase = v3.sub(this.vasePos, this.vaseRest);
+          this.offVaseRot = this.vaseQuat.slice();
+        }
+        this.placeD = d;
+      }
     }
     if (this.held) {
       const [palmP, palmQ] = this._palmPose(qpos);
@@ -494,6 +527,11 @@ export class MotionMatcher {
       [this.offVaseRot, this.offVaseAng] = decayRot(this.offVaseRot, this.offVaseAng, this.WELD_HL, this.DT);
       this.vasePos = v3.add(v3.add(palmP, quat.mulVec(palmQ, this.snapPos)), this.offVase);
       this.vaseQuat = quat.mul(this.offVaseRot, quat.mul(palmQ, this.snapQuat));
+    } else {
+      [this.offVase, this.offVaseVel] = decayPos(this.offVase, this.offVaseVel, this.WELD_HL, this.DT);
+      [this.offVaseRot, this.offVaseAng] = decayRot(this.offVaseRot, this.offVaseAng, this.WELD_HL, this.DT);
+      this.vasePos = v3.add(this.vaseRest, this.offVase);
+      this.vaseQuat = this.offVaseRot.slice();
     }
     return qpos;
   }

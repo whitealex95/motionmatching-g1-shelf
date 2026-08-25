@@ -5,6 +5,7 @@ Controls
   Arrow keys ........... face direction, independent of travel
   Shift (hold) ......... walk instead of run
   B .................... pick up the bottle (walks to the shelf by itself)
+  N .................... put the bottle back (only while holding it)
   Space ................ reset robot and bottle
   T .................... toggle the command trajectory gizmo
   Left-drag orbit | right-drag pan | scroll zoom | Esc quit
@@ -87,6 +88,8 @@ class InteractiveViewer:
                 self.show_traj = not self.show_traj
             elif key == glfw.KEY_B:
                 self.matcher.trigger_pick()
+            elif key == glfw.KEY_N:
+                self.matcher.trigger_place()
             elif key in _MOVE_KEYS or key in _FACE_KEYS:
                 self.held.add(key)
         elif action == glfw.RELEASE:
@@ -258,13 +261,14 @@ class InteractiveViewer:
             head = ("RUN" if speed > C.MAX_SPEED * (1 + C.WALK_SCALE) / 2 else
                     ("WALK" if speed > 1e-3 else "IDLE"))
             if m.held:
-                head += "  bottle in hand"
+                head += "  bottle in hand  [N: put it back]"
             else:
                 head += "  [B: pick up the bottle]"
         elif state == "MOVE-TO-PICK":
-            head = "WALKING TO THE SHELF  [B: cancel]"
+            key = "N" if m.placing else "B"
+            head = f"WALKING TO THE SHELF  [{key}: cancel]"
         else:
-            head = "PICKING UP THE BOTTLE"
+            head = "PLACING THE BOTTLE" if m.placing else "PICKING UP THE BOTTLE"
         lib, cur = m.lib, m.cur
         cid = int(lib["clip_id"][cur])
         clip = lib["clip_names"][cid]

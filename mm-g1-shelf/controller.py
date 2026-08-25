@@ -78,12 +78,18 @@ class MotionMatcher:
         self.route_wp = self.stance_xy - 0.6 * np.array(
             [np.cos(self.stance_yaw), np.sin(self.stance_yaw)])
 
-        # The grip: palm -> vase pose at the clip's own grab frame. When the
-        # contact flag turns on, the vase snaps to this pose on the live palm.
+        # The grip: palm -> vase pose at the clip's own grab frame, pushed
+        # WELD_STANDOFF out along the recorded approach so the palm rests on
+        # the bottle's boundary instead of its center line.
         self.armfk = ArmFK(lib)
         grab = lo + int(np.argmax(self.contact[lo:hi] > 0.5))
         palm_p, palm_q = self.armfk.palm_pose(lib["qpos"][grab].astype(np.float64))
-        self.snap_pos = quat.inv_mul_vec(palm_q, self.vase_rest - palm_p)
+        prev_p, _ = self.armfk.palm_pose(lib["qpos"][grab - 8].astype(np.float64))
+        appr = palm_p - prev_p
+        appr[2] = 0.0                         # the bottle stands upright
+        appr /= np.linalg.norm(appr)
+        grip_rest = self.vase_rest + C.WELD_STANDOFF * appr
+        self.snap_pos = quat.inv_mul_vec(palm_q, grip_rest - palm_p)
         self.snap_quat = quat.inv(palm_q)     # the vase stands upright at rest
         self.reset(start_frame)
 

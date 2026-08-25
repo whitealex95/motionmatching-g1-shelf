@@ -77,3 +77,8 @@ SNAP_HALFLIFE = 1.0
 # moment is inertialized away at WELD_HALFLIFE, so the bottle never jumps.
 WELD_RADIUS = 0.03
 WELD_HALFLIFE = 0.1
+# The recorded palm stops on the bottle's center line, which would bury the
+# hand half a bottle deep. The grip is shifted this far along the recorded
+# approach direction, so the palm holds the bottle at its boundary
+# (flask radius 0.0325 m plus the palm surface).
+WELD_STANDOFF = 0.04

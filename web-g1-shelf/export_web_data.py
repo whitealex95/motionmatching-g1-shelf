@@ -190,6 +190,7 @@ def export_mm(lib):
         move_arrive_yaw=C.MOVE_ARRIVE_YAW,
         move_timeout=C.MOVE_TIMEOUT,
         snap_radius=C.SNAP_RADIUS, snap_halflife=C.SNAP_HALFLIFE,
+        weld_radius=C.WELD_RADIUS, weld_halflife=C.WELD_HALFLIFE,
         palm_offset=C.PALM_OFFSET, arm_qpos_start=C.ARM_QPOS.start,
         # Precomputed by the Python controller so both sides agree exactly.
         pick_entry=int(m.pick_entry), pick_lo=int(m.pick_lo),

@@ -7,8 +7,9 @@
 // MOVE-TO-PICK walks a planned route to the recorded stance (way-in point,
 // rounded corner, then in along the stance heading, aiming a bit past it);
 // on the final leg the root is pinned to the rail. PICK plays the clip with
-// no re-matching; at the contact frame the vase snaps onto the right palm
-// with the recorded grip pose and follows the hand from then on.
+// no re-matching; the bottle welds onto the right palm as soon as the live
+// grip pose touches it (contact frame as fallback), the leftover offset is
+// inertialized away, and it follows the hand from then on.
 
 import { quat, v3 } from './quat.js';
 import { fk } from './fk.js';
@@ -87,6 +88,7 @@ export class MotionMatcher {
     this.ARRIVE_YAW = meta.move_arrive_yaw;
     this.MOVE_TIMEOUT = meta.move_timeout;
     this.SNAP_RADIUS = meta.snap_radius; this.SNAP_HL = meta.snap_halflife;
+    this.WELD_RADIUS = meta.weld_radius; this.WELD_HL = meta.weld_halflife;
     this.PALM = meta.palm_offset;
     this.ARM0 = meta.arm_qpos_start;
     this.pickEntry = meta.pick_entry;
@@ -147,6 +149,10 @@ export class MotionMatcher {
     this.cmdVel = [0, 0, 0]; this.cmdFace = [0, 0, 0];
     // The vase: on the shelf until the grab, then stuck to the palm.
     this.held = false;
+    // Weld offset: rest pose minus grip pose at the weld moment,
+    // inertialized to zero while held.
+    this.offVase = [0, 0, 0]; this.offVaseVel = [0, 0, 0];
+    this.offVaseRot = [1, 0, 0, 0]; this.offVaseAng = [0, 0, 0];
     this.vasePos = this.vaseRest.slice();
     this.vaseQuat = IDENTITY.slice();
     this.Tpos = [this.rootPos, this.rootPos, this.rootPos];
@@ -466,15 +472,28 @@ export class MotionMatcher {
     qpos[3] = pelvRot[0]; qpos[4] = pelvRot[1]; qpos[5] = pelvRot[2]; qpos[6] = pelvRot[3];
     for (let i = 0; i < 29; i++) qpos[7 + i] = dofOut[i];
 
-    // The vase: snap onto the palm when the contact flag turns on, then
-    // follow the hand with the recorded grip pose.
-    if (this.state === this.PICK && !this.held && this.contact(f) > 0.5) {
-      this.held = true;
+    // The vase: weld onto the palm when the live grip pose touches the
+    // resting bottle (recorded contact frame as fallback). The offset left
+    // at that moment is inertialized away, so the bottle is carried off
+    // from where it stood instead of jumping to the hand.
+    if (this.state === this.PICK && !this.held) {
+      const [palmP, palmQ] = this._palmPose(qpos);
+      const grip = v3.add(palmP, quat.mulVec(palmQ, this.snapPos));
+      const d = Math.hypot(grip[0] - this.vasePos[0], grip[1] - this.vasePos[1],
+                           grip[2] - this.vasePos[2]);
+      if (d < this.WELD_RADIUS || this.contact(f) > 0.5) {
+        this.held = true;
+        this.offVase = v3.sub(this.vasePos, grip);
+        this.offVaseRot = quat.mul(
+          this.vaseQuat, quat.inv(quat.mul(palmQ, this.snapQuat)));
+      }
     }
     if (this.held) {
       const [palmP, palmQ] = this._palmPose(qpos);
-      this.vasePos = v3.add(palmP, quat.mulVec(palmQ, this.snapPos));
-      this.vaseQuat = quat.mul(palmQ, this.snapQuat);
+      [this.offVase, this.offVaseVel] = decayPos(this.offVase, this.offVaseVel, this.WELD_HL, this.DT);
+      [this.offVaseRot, this.offVaseAng] = decayRot(this.offVaseRot, this.offVaseAng, this.WELD_HL, this.DT);
+      this.vasePos = v3.add(v3.add(palmP, quat.mulVec(palmQ, this.snapPos)), this.offVase);
+      this.vaseQuat = quat.mul(this.offVaseRot, quat.mul(palmQ, this.snapQuat));
     }
     return qpos;
   }

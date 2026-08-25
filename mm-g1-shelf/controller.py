@@ -12,9 +12,9 @@ behind it, around a rounded corner, then in along the stance heading), with
 the future taps read straight off that route. On the final leg the root is
 pinned to the rail, and the route aims past the stance so the walk never
 slows into the dead zone; PICK starts at the stance crossing and plays the
-clip to the end with no re-matching. When the clip's contact flag turns
-on, the vase snaps onto the right palm with the recorded grip pose and
-follows the hand from then on.
+clip to the end with no re-matching. The bottle welds onto the right palm
+as soon as the live grip pose touches it (WELD_RADIUS, with the clip's
+contact frame as fallback) and follows the hand from then on.
 """
 import numpy as np
 from scipy.spatial import cKDTree
@@ -118,6 +118,10 @@ class MotionMatcher:
         self.held = False
         self.vase_pos = self.vase_rest.copy()
         self.vase_quat = IDENTITY.copy()
+        # Weld offset: rest pose minus grip pose at the weld moment,
+        # inertialized to zero while held.
+        self.offVase = np.zeros(3); self.offVaseVel = np.zeros(3)
+        self.offVaseRot = IDENTITY.copy(); self.offVaseAng = np.zeros(3)
         self.Tpos = np.tile(self.rootPos, (len(HORIZONS), 1))
         self.Tdir = np.tile(self.desiredDir, (len(HORIZONS), 1))
 
@@ -430,13 +434,27 @@ class MotionMatcher:
         qpos[3:7] = pelvWorldRot
         qpos[7:] = dofOut
 
-        # The vase: snap onto the palm when the contact flag turns on, then
-        # follow the hand with the recorded grip pose.
-        if (self.state == C.SKILL_PICK and not self.held
-                and self.contact[f] > 0.5):
-            self.held = True
+        # The vase: weld onto the palm when the live grip pose touches the
+        # resting bottle (recorded contact frame as fallback). The offset
+        # left at that moment is inertialized away, so the bottle is carried
+        # off from where it stood instead of jumping to the hand.
+        if self.state == C.SKILL_PICK and not self.held:
+            palm_p, palm_q = self.armfk.palm_pose(qpos)
+            grip = palm_p + quat.mul_vec(palm_q, self.snap_pos)
+            if (np.linalg.norm(grip - self.vase_pos) < C.WELD_RADIUS
+                    or self.contact[f] > 0.5):
+                self.held = True
+                self.offVase = self.vase_pos - grip
+                self.offVaseRot = quat.mul(
+                    self.vase_quat, quat.inv(quat.mul(palm_q, self.snap_quat)))
         if self.held:
             palm_p, palm_q = self.armfk.palm_pose(qpos)
-            self.vase_pos = palm_p + quat.mul_vec(palm_q, self.snap_pos)
-            self.vase_quat = quat.mul(palm_q, self.snap_quat)
+            self.offVase, self.offVaseVel = DecaySpringDamperPosition(
+                self.offVase, self.offVaseVel, C.WELD_HALFLIFE, DT)
+            self.offVaseRot, self.offVaseAng = DecaySpringDamperRotation(
+                self.offVaseRot, self.offVaseAng, C.WELD_HALFLIFE, DT)
+            self.vase_pos = (palm_p + quat.mul_vec(palm_q, self.snap_pos)
+                             + self.offVase)
+            self.vase_quat = quat.mul(self.offVaseRot,
+                                      quat.mul(palm_q, self.snap_quat))
         return qpos

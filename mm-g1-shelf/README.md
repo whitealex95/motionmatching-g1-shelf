@@ -25,10 +25,11 @@ LOCOMOTION --B--> MOVE-TO-PICK --arrived--> PICK --clip end--> LOCOMOTION
   route (walk the remaining path at the approach speed and sample the
   horizons), so the query asks for exactly the trajectory we want. B again
   cancels, and each leg gives up after `MOVE_TIMEOUT`.
-- **PICK** plays the clip to the end with no re-matching. The entry offset
-  at the stance crossing is ~1-2 cm; the bottle snap absorbs it at the grab —
-  the bottle takes the recorded grip pose on the palm at that moment and
-  follows the hand from then on.
+- **PICK** plays the clip to the end with no re-matching. The bottle welds
+  onto the palm as soon as the live grip pose touches it (`WELD_RADIUS`,
+  with the clip's contact frame as fallback). The ~1-2 cm entry offset left
+  at that moment is inertialized away (`WELD_HALFLIFE`), so the bottle is
+  carried off from where it stood instead of jumping to the hand.
 
 With the trajectory gizmo on (T), MOVE-TO-PICK also shows how its command
 is made: a green line to the stance, a blue arrow for the commanded

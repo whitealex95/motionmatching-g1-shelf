@@ -70,3 +70,10 @@ MOVE_TIMEOUT = 8.0          # give up walking after this long (s)
 # motion are projected out at this half-life.
 SNAP_RADIUS = 4.0
 SNAP_HALFLIFE = 1.0
+
+# The weld: during the pick, the bottle sticks to the palm as soon as the
+# live grip pose comes this close to it (the recorded contact frame is the
+# fallback, so the grab cannot be missed). The pose offset left at that
+# moment is inertialized away at WELD_HALFLIFE, so the bottle never jumps.
+WELD_RADIUS = 0.03
+WELD_HALFLIFE = 0.1
